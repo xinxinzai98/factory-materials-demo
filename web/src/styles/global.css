@@ -22,6 +22,8 @@ body {
   background: linear-gradient(135deg, var(--bg-grad-start) 0%, var(--bg-grad-mid) 40%, var(--bg-grad-end) 100%);
 }
 .ant-layout { background: transparent !important; }
+.ant-layout-sider { background: transparent !important; }
+.theme-light .ant-layout-sider { background: rgba(255,255,255,0.85) !important; }
 .app-header-title {
   font-weight: 700;
   letter-spacing: 0.5px;

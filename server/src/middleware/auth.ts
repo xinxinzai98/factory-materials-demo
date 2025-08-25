@@ -8,8 +8,9 @@ export function authGuard() {
     const apiKey = req.header('X-API-Key')
     const expected = process.env.API_KEY || 'dev-api-key'
     const authz = req.header('Authorization')
+  const requireJwt = String(process.env.REQUIRE_JWT || '').toLowerCase() === 'true'
 
-    if (apiKey && apiKey === expected) return next()
+  if (!requireJwt && apiKey && apiKey === expected) return next()
 
     if (authz && authz.startsWith('Bearer ')) {
       const token = authz.slice(7)

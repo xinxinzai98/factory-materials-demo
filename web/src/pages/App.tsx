@@ -1,5 +1,5 @@
 import { Layout, Menu, theme, Typography, Button } from 'antd'
-import { Link, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { HomeOutlined, DatabaseOutlined, InboxOutlined, SendOutlined, SettingOutlined, SwapOutlined, ToolOutlined, DashboardOutlined } from '@ant-design/icons'
 import MaterialsPage from './Materials'
 import StocksPage from './Stocks'
@@ -33,6 +33,8 @@ type AppProps = { isDark?: boolean; onToggleTheme?: () => void }
 export default function App({ isDark, onToggleTheme }: AppProps) {
   const loc = useLocation()
   const { token } = theme.useToken()
+  const role = (localStorage.getItem('role') || 'VIEWER') as 'ADMIN'|'OP'|'VIEWER'
+  const authed = !!localStorage.getItem('token')
   const pathname = loc.pathname
   const selectedKey = (() => {
     if (pathname.startsWith('/inbounds')) return '/inbounds'
@@ -46,13 +48,19 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
     return ''
   })()
 
+  // 菜单按角色过滤（VIEWER 隐藏写操作）
+  const menusByRole = items.filter(it => {
+    if (['/inbound-new','/outbound-new','/transfer','/adjust','/settings'].includes(it.key)) return role !== 'VIEWER'
+    return true
+  })
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider breakpoint="lg" collapsedWidth="0">
+      <Sider breakpoint="lg" collapsedWidth="0" style={{ background: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.85)' }}>
   <div style={{ height: 48, margin: 16, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
           <div className="brand">Factory Materials</div>
         </div>
-  <Menu theme={isDark ? 'dark' : 'light'} mode="inline" selectedKeys={[selectedKey]} items={items} />
+  <Menu theme={isDark ? 'dark' : 'light'} mode="inline" selectedKeys={[selectedKey]} items={menusByRole} />
       </Sider>
       <Layout>
         <Header style={{ background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 16 }}>
@@ -79,6 +87,8 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
             <Route path="/transfer" element={<TransferPage />} />
             <Route path="/adjust" element={<AdjustPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            {/* 未登录则仅允许访问根封面与登录页 */}
+            {!authed && <Route path="*" element={<Navigate to="/" replace />} />}
             </Routes>
           </div>
         </Content>

@@ -20,3 +20,16 @@
 - 入库单：DRAFT -> APPROVED -> PUTAWAY -> (CANCELLED)
 - 出库单：DRAFT -> APPROVED -> PICKED -> (CANCELLED)
 - 即时入/出库：创建后直接过账（入：APPROVED+入账；出：直接 PICKED），避免重复扣/加
+
+## 功能说明与角色可见性
+- 菜单项
+  - 仪表盘：关键指标与快捷入口（全部角色可见）
+  - 物料：物料主数据查看与新增（VIEWER 仅查看；OP/ADMIN 可新增）
+  - 库存：按物料/仓库/批次查询（全部可见）
+  - 入库单：列表/详情/草稿/审批/上架（VIEWER 仅查看；OP/ADMIN 可操作）
+  - 出库单：列表/详情/草稿/审批/拣货（VIEWER 仅查看；OP/ADMIN 可操作）
+  - 移库：在仓间/批次间转移库存（OP/ADMIN 可见）
+  - 盘点/调整：将批次库存强制到目标量（OP/ADMIN 可见）
+  - 设置：系统参数、API 基址/Key、主题切换（OP/ADMIN 可见；部分只读）
+
+> 前端按 localStorage 中 role 进行菜单过滤；后端路由由 RBAC 强制校验，确保越权无效。
