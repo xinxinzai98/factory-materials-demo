@@ -1,0 +1,32 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: materials_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: materials
+    ports:
+      - '5432:5432'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+  api:
+    build: ./server
+    container_name: materials_api
+    depends_on:
+      - db
+    environment:
+      PORT: 8080
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_NAME: materials
+      DB_SYNC: 'true'
+      API_KEY: dev-api-key
+    ports:
+      - '8080:8080'
+volumes:
+  db_data: {}

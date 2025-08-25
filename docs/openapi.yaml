@@ -1,0 +1,304 @@
+openapi: 3.0.3
+info:
+  title: 工厂物料管理系统 Open API
+  version: 0.1.0
+  description: 初版对外 API 规范草案
+servers:
+  - url: http://localhost:8080
+    description: 本地开发
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 100
+    Material:
+      type: object
+      required: [id, code, name, uom]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        spec: { type: string }
+        uom: { type: string }
+        category: { type: string }
+        barcode: { type: string }
+        isBatch: { type: boolean }
+        shelfLifeDays: { type: integer, nullable: true }
+        enabled: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    Stock:
+      type: object
+      properties:
+        materialId: { type: string, format: uuid }
+        materialCode: { type: string }
+        warehouse: { type: string }
+        location: { type: string }
+        batchNo: { type: string }
+        expDate: { type: string, format: date }
+        qtyOnHand: { type: number }
+        qtyAllocated: { type: number }
+        qtyAvailable: { type: number }
+    InboundOrder:
+      type: object
+      properties:
+        code: { type: string }
+        sourceType: { type: string, enum: [PURCHASE, RETURN, ADJUST_GAIN] }
+        supplier: { type: string }
+        arriveDate: { type: string, format: date }
+        status: { type: string, enum: [DRAFT, APPROVED, PUTAWAY, CANCELLED] }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundItem'
+    InboundItem:
+      type: object
+      properties:
+        materialCode: { type: string }
+        qty: { type: number }
+        batchNo: { type: string }
+        expDate: { type: string, format: date }
+        uprice: { type: number }
+    OutboundOrder:
+      type: object
+      properties:
+        code: { type: string }
+        purpose: { type: string, enum: [MO_ISSUE, SALE, RETURN, ADJUST_LOSS] }
+        status: { type: string, enum: [DRAFT, APPROVED, PICKED, CANCELLED] }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutboundItem'
+    OutboundItem:
+      type: object
+      properties:
+        materialCode: { type: string }
+        qty: { type: number }
+        batchPolicy: { type: string, enum: [SYSTEM, SPECIFIED] }
+        batchNo: { type: string, nullable: true }
+
+paths:
+  /api/materials:
+    get:
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      summary: 查询物料主数据
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: 关键字
+        - in: query
+          name: updatedSince
+          schema: { type: string, format: date-time }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Material' }
+                  page:
+                    $ref: '#/components/schemas/Pagination'
+  /api/stocks:
+    get:
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      summary: 查询当前库存
+      parameters:
+        - in: query
+          name: materialCode
+          schema: { type: string }
+        - in: query
+          name: warehouse
+          schema: { type: string }
+        - in: query
+          name: batchNo
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Stock' }
+  /api/inbounds:
+    post:
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      summary: 创建入库单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InboundOrder' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundOrder'
+  /api/outbounds:
+    post:
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      summary: 创建出库单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OutboundOrder' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundOrder'
+  /api/orders/{code}:
+    get:
+  /api/transfers:
+    post:
+  /api/adjustments:
+    post:
+      summary: 盘点/调整库存
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [materialCode, warehouse, targetQty]
+              properties:
+                materialCode: { type: string }
+                warehouse: { type: string }
+                batchNo: { type: string, nullable: true }
+                targetQty: { type: number }
+                reason: { type: string }
+      responses:
+        '201': { description: Created }
+        '400': { description: Bad Request }
+      summary: 转移库存（移库）
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [materialCode, qty, fromWarehouse, toWarehouse]
+              properties:
+                materialCode: { type: string }
+                qty: { type: number }
+                fromWarehouse: { type: string }
+                fromBatchNo: { type: string, nullable: true }
+                toWarehouse: { type: string }
+                toLocation: { type: string, nullable: true }
+      responses:
+        '201': { description: Created }
+        '400': { description: Bad Request }
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+  /api/auth/register:
+    post:
+      summary: 注册用户（开发用途）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+                role: { type: string, enum: [ADMIN, OP, VIEWER] }
+      responses:
+        '201': { description: Created }
+        '409': { description: Username exists }
+  /api/auth/login:
+    post:
+      summary: 用户登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      username: { type: string }
+                      role: { type: string }
+        '401': { description: Unauthorized }
+  /api/auth/me:
+    get:
+      summary: 当前用户
+      security:
+        - BearerAuth: []
+      responses:
+        '200': { description: OK }
+      summary: 查询单据
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
