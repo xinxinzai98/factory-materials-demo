@@ -7,7 +7,9 @@
   "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts"
+    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts",
+    "migration:run": "npm run build && node ./node_modules/typeorm/cli.js migration:run -d dist/data-source.js",
+    "migration:revert": "npm run build && node ./node_modules/typeorm/cli.js migration:revert -d dist/data-source.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

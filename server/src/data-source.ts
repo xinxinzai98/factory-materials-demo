@@ -14,7 +14,9 @@ import { Adjustment } from './entities/Adjustment.js';
 
 dotenv.config();
 
-const sync = (process.env.DB_SYNC || 'true') === 'true';
+const sync = (process.env.DB_SYNC || 'false') === 'true';
+
+const migrationsGlob = process.env.MIGRATIONS_GLOB || (process.env.NODE_ENV === 'development' ? 'src/migrations/*.ts' : 'dist/migrations/*.js');
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -26,5 +28,5 @@ export const AppDataSource = new DataSource({
   synchronize: sync,
   logging: false,
   entities: [Material, Warehouse, Location, Stock, InboundOrder, InboundItem, OutboundOrder, OutboundItem, User, Adjustment],
-  migrations: ['src/migrations/*.ts'],
+  migrations: [migrationsGlob],
 });

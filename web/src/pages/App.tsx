@@ -5,6 +5,10 @@ import MaterialsPage from './Materials'
 import StocksPage from './Stocks'
 import InboundPage from './Inbound'
 import OutboundPage from './Outbound'
+import InboundListPage from './InboundsList'
+import OutboundListPage from './OutboundsList'
+import InboundDetailPage from './InboundDetail'
+import OutboundDetailPage from './OutboundDetail'
 import SettingsPage from './Settings'
 import TransferPage from './Transfer'
 import AdjustPage from './Adjust'
@@ -16,8 +20,8 @@ const items = [
   { key: '/', icon: <HomeOutlined />, label: <Link to="/">首页</Link> },
   { key: '/materials', icon: <DatabaseOutlined />, label: <Link to="/materials">物料</Link> },
   { key: '/stocks', icon: <InboxOutlined />, label: <Link to="/stocks">库存</Link> },
-  { key: '/inbound', icon: <InboxOutlined />, label: <Link to="/inbound">入库</Link> },
-  { key: '/outbound', icon: <SendOutlined />, label: <Link to="/outbound">出库</Link> },
+  { key: '/inbounds', icon: <InboxOutlined />, label: <Link to="/inbounds">入库单</Link> },
+  { key: '/outbounds', icon: <SendOutlined />, label: <Link to="/outbounds">出库单</Link> },
   { key: '/transfer', icon: <SwapOutlined />, label: <Link to="/transfer">移库</Link> },
   { key: '/adjust', icon: <ToolOutlined />, label: <Link to="/adjust">盘点/调整</Link> },
   { key: '/settings', icon: <SettingOutlined />, label: <Link to="/settings">设置</Link> },
@@ -43,8 +47,12 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/materials" element={<MaterialsPage />} />
             <Route path="/stocks" element={<StocksPage />} />
-            <Route path="/inbound" element={<InboundPage />} />
-            <Route path="/outbound" element={<OutboundPage />} />
+            <Route path="/inbound-new" element={<InboundPage />} />
+            <Route path="/outbound-new" element={<OutboundPage />} />
+            <Route path="/inbounds" element={<InboundListPage />} />
+            <Route path="/outbounds" element={<OutboundListPage />} />
+            <Route path="/inbounds/:code" element={<InboundDetailPage />} />
+            <Route path="/outbounds/:code" element={<OutboundDetailPage />} />
             <Route path="/transfer" element={<TransferPage />} />
             <Route path="/adjust" element={<AdjustPage />} />
             <Route path="/settings" element={<SettingsPage />} />

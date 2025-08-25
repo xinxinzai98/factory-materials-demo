@@ -24,7 +24,7 @@ services:
       DB_USER: postgres
       DB_PASS: postgres
       DB_NAME: materials
-      DB_SYNC: 'true'
+      DB_SYNC: 'false'
       API_KEY: dev-api-key
     ports:
       - '8080:8080'

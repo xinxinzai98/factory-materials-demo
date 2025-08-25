@@ -92,6 +92,102 @@ router.get('/stocks', async (req: Request, res: Response) => {
   res.json(data);
 });
 
+// ------------------- 入库单：列表与流转 -------------------
+// GET /api/inbounds 列表
+router.get('/inbounds', async (req: Request, res: Response) => {
+  const page = +(req.query.page as string || 1)
+  const pageSize = +(req.query.pageSize as string || 20)
+  const repo = AppDataSource.getRepository(InboundOrder)
+  const [data, total] = await repo.findAndCount({
+    order: { createdAt: 'DESC' as any },
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    relations: ['items'],
+  })
+  res.json({ data, page: { page, pageSize, total } })
+})
+
+// POST /api/inbounds/draft 创建草稿（不动库存）
+router.post('/inbounds/draft', async (req: Request, res: Response) => {
+  const { code, sourceType, supplier, arriveDate, items } = req.body || {}
+  if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' })
+
+  await AppDataSource.transaction(async (mgr: EntityManager) => {
+    const exist = await mgr.getRepository(InboundOrder).findOne({ where: { code } })
+    if (exist) throw new Error('duplicate code')
+    const order = mgr.getRepository(InboundOrder).create({ code, sourceType, supplier, arriveDate, status: 'DRAFT' })
+    await mgr.getRepository(InboundOrder).save(order)
+    for (const it of items) {
+      const material = await mgr.getRepository(Material).findOne({ where: { code: it.materialCode } })
+      if (!material) throw new Error(`material not found: ${it.materialCode}`)
+      const inboundItem = mgr.getRepository(InboundItem).create({
+        orderId: order.id,
+        materialId: material.id,
+        qty: String(it.qty),
+        batchNo: it.batchNo || '',
+        expDate: it.expDate || null,
+        uprice: it.uprice ? String(it.uprice) : null,
+      })
+      await mgr.getRepository(InboundItem).save(inboundItem)
+    }
+    const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
+    res.status(201).json(saved)
+  }).catch((e: any) => res.status(400).json({ message: e.message }))
+})
+
+// POST /api/inbounds/:code/approve 审批（不动库存）
+router.post('/inbounds/:code/approve', async (req: Request, res: Response) => {
+  const code = req.params.code
+  const repo = AppDataSource.getRepository(InboundOrder)
+  const order = await repo.findOne({ where: { code } })
+  if (!order) return res.status(404).json({ message: 'order not found' })
+  if (order.status !== 'DRAFT') return res.status(409).json({ message: 'invalid status' })
+  order.status = 'APPROVED'
+  await repo.save(order)
+  res.json(order)
+})
+
+// POST /api/inbounds/:code/putaway 上架完成（此时入账库存）
+router.post('/inbounds/:code/putaway', async (req: Request, res: Response) => {
+  const code = req.params.code
+  await AppDataSource.transaction(async (mgr: EntityManager) => {
+    const orderRepo = mgr.getRepository(InboundOrder)
+    const itemRepo = mgr.getRepository(InboundItem)
+    const stRepo = mgr.getRepository(Stock)
+    const whRepo = mgr.getRepository(Warehouse)
+
+    const order = await orderRepo.findOne({ where: { code } })
+    if (!order) throw new Error('order not found')
+    if (order.status !== 'APPROVED') throw new Error('invalid status')
+    const items = await itemRepo.find({ where: { orderId: order.id } })
+    const wh = await whRepo.findOne({ where: { code: 'WH1' } })
+    if (!wh) throw new Error('warehouse not found')
+    for (const it of items) {
+      const stock = await stRepo.findOne({ where: { materialId: it.materialId, warehouseId: wh.id, batchNo: it.batchNo || '' } })
+      if (!stock) {
+        await stRepo.save(stRepo.create({
+          materialId: it.materialId,
+          warehouseId: wh.id,
+          batchNo: it.batchNo || '',
+          expDate: it.expDate || null,
+          mfgDate: null,
+          qtyOnHand: String(it.qty),
+          qtyAllocated: '0',
+          qtyInTransit: '0',
+          locationId: undefined,
+        }))
+      } else {
+        stock.qtyOnHand = String(Number(stock.qtyOnHand) + Number(it.qty))
+        await stRepo.save(stock)
+      }
+    }
+    order.status = 'PUTAWAY'
+    await orderRepo.save(order)
+    const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
+    res.json(saved)
+  }).catch((e: any) => res.status(400).json({ message: e.message }))
+})
+
 // POST /api/inbounds
 router.post('/inbounds', async (req: Request, res: Response) => {
   const { code, sourceType, supplier, arriveDate, items, warehouseCode } = req.body || {};
@@ -148,15 +244,113 @@ router.post('/inbounds', async (req: Request, res: Response) => {
           qtyInTransit: '0',
         });
       }
-      const newQty = Number(stock.qtyOnHand) + Number(it.qty || 0);
-      stock.qtyOnHand = String(newQty);
-      await mgr.getRepository(Stock).save(stock);
     }
+    const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
+    res.status(201).json(saved)
+  }).catch((e: any) => res.status(400).json({ message: e.message }))
+})
 
-    const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] });
-    res.status(201).json(saved);
-  }).catch((e: any) => res.status(400).json({ message: e.message }));
-});
+        // ------------------- 出库单：列表与流转 -------------------
+        // GET /api/outbounds 列表
+        router.get('/outbounds', async (req: Request, res: Response) => {
+          const page = +(req.query.page as string || 1)
+          const pageSize = +(req.query.pageSize as string || 20)
+          const repo = AppDataSource.getRepository(OutboundOrder)
+          const [data, total] = await repo.findAndCount({
+            order: { createdAt: 'DESC' as any },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+            relations: ['items'],
+          })
+          res.json({ data, page: { page, pageSize, total } })
+        })
+
+        // POST /api/outbounds/draft 创建草稿（不动库存）
+        router.post('/outbounds/draft', async (req: Request, res: Response) => {
+          const { code, purpose, items } = req.body || {}
+          if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' })
+          await AppDataSource.transaction(async (mgr: EntityManager) => {
+            const exist = await mgr.getRepository(OutboundOrder).findOne({ where: { code } })
+            if (exist) throw new Error('duplicate code')
+            const order = mgr.getRepository(OutboundOrder).create({ code, purpose, status: 'DRAFT' })
+            await mgr.getRepository(OutboundOrder).save(order)
+            for (const it of items) {
+              const material = await mgr.getRepository(Material).findOne({ where: { code: it.materialCode } })
+              if (!material) throw new Error(`material not found: ${it.materialCode}`)
+              const outItem = mgr.getRepository(OutboundItem).create({
+                orderId: order.id,
+                materialId: material.id,
+                qty: String(it.qty),
+                batchPolicy: (it.batchPolicy || 'SYSTEM'),
+                batchNo: it.batchNo || null,
+              })
+              await mgr.getRepository(OutboundItem).save(outItem)
+            }
+            const saved = await mgr.getRepository(OutboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
+            res.status(201).json(saved)
+          }).catch((e: any) => res.status(400).json({ message: e.message }))
+        })
+
+        // POST /api/outbounds/:code/approve 审批（不动库存）
+        router.post('/outbounds/:code/approve', async (req: Request, res: Response) => {
+          const code = req.params.code
+          const repo = AppDataSource.getRepository(OutboundOrder)
+          const order = await repo.findOne({ where: { code } })
+          if (!order) return res.status(404).json({ message: 'order not found' })
+          if (order.status !== 'DRAFT') return res.status(409).json({ message: 'invalid status' })
+          order.status = 'APPROVED'
+          await repo.save(order)
+          res.json(order)
+        })
+
+        // POST /api/outbounds/:code/pick 拣货完成（此时扣减库存）
+        router.post('/outbounds/:code/pick', async (req: Request, res: Response) => {
+          const code = req.params.code
+          await AppDataSource.transaction(async (mgr: EntityManager) => {
+            const orderRepo = mgr.getRepository(OutboundOrder)
+            const itemRepo = mgr.getRepository(OutboundItem)
+            const whRepo = mgr.getRepository(Warehouse)
+            const stRepo = mgr.getRepository(Stock)
+            const order = await orderRepo.findOne({ where: { code } })
+            if (!order) throw new Error('order not found')
+            if (order.status !== 'APPROVED') throw new Error('invalid status')
+            const items = await itemRepo.find({ where: { orderId: order.id } })
+            const wh = await whRepo.findOne({ where: { code: 'WH1' } })
+            if (!wh) throw new Error('warehouse not found')
+
+            for (const it of items) {
+              let qtyToPick = Number(it.qty)
+              if ((it.batchPolicy as any) === 'SPECIFIED' && it.batchNo) {
+                const stock = await stRepo.findOne({ where: { materialId: it.materialId, warehouseId: wh.id, batchNo: it.batchNo } })
+                if (!stock || Number(stock.qtyOnHand) < qtyToPick) throw new Error('insufficient stock for batch')
+                stock.qtyOnHand = String(Number(stock.qtyOnHand) - qtyToPick)
+                await stRepo.save(stock)
+              } else {
+                const stocks = await stRepo.createQueryBuilder('s')
+                  .where('s.material_id = :mid AND s.warehouse_id = :wid AND s.qty_on_hand > 0', { mid: it.materialId, wid: wh.id })
+                  .orderBy('s.exp_date', 'ASC', 'NULLS LAST')
+                  .addOrderBy('s.batch_no', 'ASC')
+                  .getMany()
+                for (const s of stocks) {
+                  if (qtyToPick <= 0) break
+                  const take = Math.min(Number(s.qtyOnHand), qtyToPick)
+                  if (take > 0) {
+                    s.qtyOnHand = String(Number(s.qtyOnHand) - take)
+                    await stRepo.save(s)
+                    qtyToPick -= take
+                  }
+                }
+                if (qtyToPick > 0) throw new Error('insufficient stock')
+              }
+            }
+            order.status = 'PICKED'
+            await orderRepo.save(order)
+            const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
+            res.json(saved)
+          }).catch((e: any) => res.status(400).json({ message: e.message }))
+        })
+
+  // 兼容：原立即入/出库接口（创建并直接过账）
 
 // POST /api/adjustments  盘点/调整：把某批次库存调整到指定数量
 router.post('/adjustments', async (req: Request, res: Response) => {
@@ -218,7 +412,8 @@ router.post('/outbounds', async (req: Request, res: Response) => {
     const wh = await mgr.getRepository(Warehouse).findOne({ where: { code: warehouseCode || 'WH1' } });
     if (!wh) throw new Error('warehouse not found');
 
-    const order = mgr.getRepository(OutboundOrder).create({ code, purpose, status: 'APPROVED' });
+  // 即时出库：直接扣减库存，并将订单状态置为 PICKED，避免后续再次拣货重复扣减
+  const order = mgr.getRepository(OutboundOrder).create({ code, purpose, status: 'PICKED' });
     await mgr.getRepository(OutboundOrder).save(order);
 
     for (const it of items) {
@@ -266,7 +461,7 @@ router.post('/outbounds', async (req: Request, res: Response) => {
       await mgr.getRepository(OutboundItem).save(outItem);
     }
 
-    const saved = await mgr.getRepository(OutboundOrder).findOne({ where: { id: order.id }, relations: ['items'] });
+  const saved = await mgr.getRepository(OutboundOrder).findOne({ where: { id: order.id }, relations: ['items'] });
     res.status(201).json(saved);
   }).catch((e: any) => res.status(400).json({ message: e.message }));
 });
