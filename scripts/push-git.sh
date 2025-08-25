@@ -36,18 +36,18 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 # 暂存并判断是否有变更
 git add -A
 if git diff --cached --quiet; then
-  echo "没有新的变更需要提交，直接推送分支 $BRANCH。"
+  echo "没有新的变更需要提交，直接推送分支 ${BRANCH}。"
 else
-  echo "提交变更：$MSG"
-  git commit -m "$MSG" || true
+  echo "提交变更：${MSG}"
+  git commit -m "${MSG}" || true
 fi
 
 # 推送（首次推送会添加 upstream）
-echo "推送到 origin/$BRANCH ..."
+echo "推送到 origin/${BRANCH} ..."
 if git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
   git push
 else
-  git push -u origin "$BRANCH"
+  git push -u origin "${BRANCH}"
 fi
 
 echo "推送完成。"
