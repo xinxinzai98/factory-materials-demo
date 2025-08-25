@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Card, Form, Input, InputNumber, Radio, Space, Table, message } from 'antd'
+import { Button, Card, Form, Input, InputNumber, Radio, Space, Table, message, Select } from 'antd'
 import { api } from '@/api/http'
 
 type Item = { materialCode: string; qty: number; batchPolicy?: 'SYSTEM' | 'SPECIFIED'; batchNo?: string }
@@ -21,15 +21,15 @@ export default function OutboundPage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
-      <Card title="出库单">
+    <Card className="glass-card" title="出库单">
         <Form form={form} layout="inline">
           <Form.Item name="code" rules={[{ required: true }]}><Input placeholder="出库单号" /></Form.Item>
-          <Form.Item name="warehouseCode" initialValue="WH1"><Input placeholder="仓库编码" /></Form.Item>
+      <Form.Item name="warehouseCode" initialValue="WH1"><Select placeholder="仓库名称" style={{ minWidth: 140 }} options={[{value:'WH1',label:'主仓'}]} /></Form.Item>
           <Form.Item><Button type="primary" onClick={submit}>提交</Button></Form.Item>
         </Form>
       </Card>
 
-      <Card title="新增出库明细">
+    <Card className="glass-card" title="新增出库明细">
         <Form layout="inline" onFinish={addItem} initialValues={{ batchPolicy: 'SYSTEM' }}>
           <Form.Item name="materialCode" rules={[{ required: true }]}><Input placeholder="物料编码" /></Form.Item>
           <Form.Item name="qty" rules={[{ required: true }]}><InputNumber placeholder="数量" min={0} /></Form.Item>

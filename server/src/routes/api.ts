@@ -12,6 +12,8 @@ import { Location } from '../entities/Location.js';
 import { InboundItem } from '../entities/InboundItem.js';
 import { OutboundItem } from '../entities/OutboundItem.js';
 import { Adjustment } from '../entities/Adjustment.js';
+import { User } from '../entities/User.js';
+import bcrypt from 'bcrypt';
 
 const router = Router();
 
@@ -578,11 +580,27 @@ router.get('/orders/:code', async (req: Request, res: Response) => {
 router.post('/seed/dev', async (_req: Request, res: Response) => {
   const whRepo = AppDataSource.getRepository(Warehouse);
   const mRepo = AppDataSource.getRepository(Material);
+  const uRepo = AppDataSource.getRepository(User);
   let wh = await whRepo.findOne({ where: { code: 'WH1' } });
   if (!wh) wh = await whRepo.save(whRepo.create({ code: 'WH1', name: '主仓' }));
   let m = await mRepo.findOne({ where: { code: 'M001' } });
   if (!m) m = await mRepo.save(mRepo.create({ code: 'M001', name: '示例物料', uom: 'PCS', isBatch: true, shelfLifeDays: 365 }));
-  res.json({ warehouse: wh, material: m });
+  // seed users
+  const ensureUser = async (username: string, role: 'ADMIN'|'OP'|'VIEWER') => {
+    let u = await uRepo.findOne({ where: { username } })
+    if (!u) {
+      const passwordHash = await bcrypt.hash('123456', 10)
+      u = uRepo.create({ username, passwordHash, role, enabled: true })
+      await uRepo.save(u)
+    }
+    return { username, role }
+  }
+  const users = [
+    await ensureUser('admin', 'ADMIN'),
+    await ensureUser('op', 'OP'),
+    await ensureUser('viewer', 'VIEWER'),
+  ]
+  res.json({ warehouse: wh, material: m, users })
 });
 
 export default router;

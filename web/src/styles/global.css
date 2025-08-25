@@ -32,12 +32,12 @@ body {
   background: var(--card-bg) !important;
   border: 1px solid var(--card-border) !important;
   backdrop-filter: blur(8px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
 }
 .ant-card.glass-card .ant-card-head-title { color: var(--text-main); }
 .ant-card.glass-card .ant-card-head { border-bottom-color: var(--card-border) }
 .ant-typography, .ant-table { color: var(--text-main); }
-.ant-table { background: color-mix(in srgb, var(--card-bg) 95%, transparent); border-radius: 10px; }
+.ant-table { background: color-mix(in srgb, var(--card-bg) 95%, transparent); border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .ant-table-thead > tr > th { background: var(--card-bg) !important; color: var(--text-sub) !important; }
 .ant-menu-dark { background: rgba(0,0,0,0.45) !important; }
 .ant-menu-light { background: rgba(255,255,255,0.85) !important; }

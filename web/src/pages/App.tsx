@@ -35,6 +35,10 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
   const { token } = theme.useToken()
   const role = (localStorage.getItem('role') || 'VIEWER') as 'ADMIN'|'OP'|'VIEWER'
   const authed = !!localStorage.getItem('token')
+  if (!authed && loc.pathname === '/') {
+    // 未登录且处于根路径：只显示封面页（独立页面，不渲染系统布局）
+    return <Splash />
+  }
   const pathname = loc.pathname
   const selectedKey = (() => {
     if (pathname.startsWith('/inbounds')) return '/inbounds'
