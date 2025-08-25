@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: 工厂物料管理系统 Open API
-  version: 0.1.0
-  description: 初版对外 API 规范草案
+  version: 0.2.0
+  description: 初版对外 API 规范草案（含 RBAC 与取消接口）
 servers:
   - url: http://localhost:8080
     description: 本地开发
@@ -176,6 +176,86 @@ paths:
                 $ref: '#/components/schemas/InboundOrder'
   /api/outbounds:
     post:
+  /api/inbounds/{code}/approve:
+    post:
+      summary: 入库单审批
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/inbounds/{code}/putaway:
+    post:
+      summary: 入库单上架过账
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/inbounds/{code}/cancel:
+    post:
+      summary: 入库单取消（仅 DRAFT/APPROVED）
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '409': { description: Invalid status }
+  /api/outbounds/{code}/approve:
+    post:
+      summary: 出库单审批
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/outbounds/{code}/pick:
+    post:
+      summary: 出库单拣货过账
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/outbounds/{code}/cancel:
+    post:
+      summary: 出库单取消（仅 DRAFT/APPROVED）
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '409': { description: Invalid status }
       security:
         - ApiKeyAuth: []
         - BearerAuth: []

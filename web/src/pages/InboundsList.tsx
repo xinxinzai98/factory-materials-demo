@@ -30,7 +30,7 @@ export default function InboundsListPage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-      <Card title="入库单列表" extra={<a href="#/inbound-new">新建即时入库</a>}>
+  <Card className="glass-card" title="入库单列表" extra={<a href="#/inbound-new">新建即时入库</a>}>
         <Table rowKey="code" loading={loading} dataSource={rows}
           columns={[
             { title: '单号', dataIndex: 'code', render: (v: string) => <Link to={`/inbounds/${v}`}>{v}</Link> },

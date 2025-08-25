@@ -30,7 +30,7 @@ export default function OutboundsListPage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-      <Card title="出库单列表" extra={<a href="#/outbound-new">新建即时出库</a>}>
+  <Card className="glass-card" title="出库单列表" extra={<a href="#/outbound-new">新建即时出库</a>}>
         <Table rowKey="code" loading={loading} dataSource={rows}
           columns={[
             { title: '单号', dataIndex: 'code', render: (v: string) => <Link to={`/outbounds/${v}`}>{v}</Link> },

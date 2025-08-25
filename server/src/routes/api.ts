@@ -6,6 +6,7 @@ import { Stock } from '../entities/Stock.js';
 import { InboundOrder } from '../entities/InboundOrder.js';
 import { OutboundOrder } from '../entities/OutboundOrder.js';
 import { authGuard } from '../middleware/auth.js';
+import { requireRoles } from '../middleware/rbac.js';
 import { Warehouse } from '../entities/Warehouse.js';
 import { Location } from '../entities/Location.js';
 import { InboundItem } from '../entities/InboundItem.js';
@@ -38,7 +39,7 @@ router.get('/materials', async (req: Request, res: Response) => {
 });
 
 // POST /api/materials
-router.post('/materials', async (req: Request, res: Response) => {
+router.post('/materials', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const { code, name, uom, spec, category, barcode, isBatch, shelfLifeDays, enabled } = req.body || {};
   if (!code || !name || !uom) return res.status(400).json({ message: 'code/name/uom required' });
   const repo = AppDataSource.getRepository(Material);
@@ -50,7 +51,7 @@ router.post('/materials', async (req: Request, res: Response) => {
 });
 
 // POST /api/warehouses
-router.post('/warehouses', async (req: Request, res: Response) => {
+router.post('/warehouses', requireRoles('ADMIN'), async (req: Request, res: Response) => {
   const { code, name, address, enabled } = req.body || {};
   if (!code || !name) return res.status(400).json({ message: 'code/name required' });
   const repo = AppDataSource.getRepository(Warehouse);
@@ -108,7 +109,7 @@ router.get('/inbounds', async (req: Request, res: Response) => {
 })
 
 // POST /api/inbounds/draft 创建草稿（不动库存）
-router.post('/inbounds/draft', async (req: Request, res: Response) => {
+router.post('/inbounds/draft', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const { code, sourceType, supplier, arriveDate, items } = req.body || {}
   if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' })
 
@@ -136,7 +137,7 @@ router.post('/inbounds/draft', async (req: Request, res: Response) => {
 })
 
 // POST /api/inbounds/:code/approve 审批（不动库存）
-router.post('/inbounds/:code/approve', async (req: Request, res: Response) => {
+router.post('/inbounds/:code/approve', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const code = req.params.code
   const repo = AppDataSource.getRepository(InboundOrder)
   const order = await repo.findOne({ where: { code } })
@@ -148,7 +149,7 @@ router.post('/inbounds/:code/approve', async (req: Request, res: Response) => {
 })
 
 // POST /api/inbounds/:code/putaway 上架完成（此时入账库存）
-router.post('/inbounds/:code/putaway', async (req: Request, res: Response) => {
+router.post('/inbounds/:code/putaway', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const code = req.params.code
   await AppDataSource.transaction(async (mgr: EntityManager) => {
     const orderRepo = mgr.getRepository(InboundOrder)
@@ -188,8 +189,21 @@ router.post('/inbounds/:code/putaway', async (req: Request, res: Response) => {
   }).catch((e: any) => res.status(400).json({ message: e.message }))
 })
 
+// 取消入库单（仅 DRAFT/APPROVED 可取消；已 PUTAWAY 不允许）
+router.post('/inbounds/:code/cancel', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const code = req.params.code
+  const repo = AppDataSource.getRepository(InboundOrder)
+  const order = await repo.findOne({ where: { code } })
+  if (!order) return res.status(404).json({ message: 'order not found' })
+  if (order.status === 'PUTAWAY') return res.status(409).json({ message: 'already posted' })
+  if (order.status === 'CANCELLED') return res.json(order)
+  order.status = 'CANCELLED' as any
+  await repo.save(order)
+  res.json(order)
+})
+
 // POST /api/inbounds
-router.post('/inbounds', async (req: Request, res: Response) => {
+router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const { code, sourceType, supplier, arriveDate, items, warehouseCode } = req.body || {};
   if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' });
 
@@ -223,14 +237,14 @@ router.post('/inbounds', async (req: Request, res: Response) => {
       });
       await mgr.getRepository(InboundItem).save(inboundItem);
 
-      // upsert stock
+      // upsert stock and add qty
       let stock = await mgr.getRepository(Stock).findOne({
         where: {
           materialId: material.id,
           warehouseId: wh.id,
           batchNo: it.batchNo || '',
         },
-      });
+      })
       if (!stock) {
         stock = mgr.getRepository(Stock).create({
           materialId: material.id,
@@ -242,8 +256,10 @@ router.post('/inbounds', async (req: Request, res: Response) => {
           qtyOnHand: '0',
           qtyAllocated: '0',
           qtyInTransit: '0',
-        });
+        })
       }
+      stock.qtyOnHand = String(Number(stock.qtyOnHand) + Number(it.qty))
+      await mgr.getRepository(Stock).save(stock)
     }
     const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
     res.status(201).json(saved)
@@ -266,7 +282,7 @@ router.post('/inbounds', async (req: Request, res: Response) => {
         })
 
         // POST /api/outbounds/draft 创建草稿（不动库存）
-        router.post('/outbounds/draft', async (req: Request, res: Response) => {
+  router.post('/outbounds/draft', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
           const { code, purpose, items } = req.body || {}
           if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' })
           await AppDataSource.transaction(async (mgr: EntityManager) => {
@@ -292,7 +308,7 @@ router.post('/inbounds', async (req: Request, res: Response) => {
         })
 
         // POST /api/outbounds/:code/approve 审批（不动库存）
-        router.post('/outbounds/:code/approve', async (req: Request, res: Response) => {
+  router.post('/outbounds/:code/approve', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
           const code = req.params.code
           const repo = AppDataSource.getRepository(OutboundOrder)
           const order = await repo.findOne({ where: { code } })
@@ -304,7 +320,7 @@ router.post('/inbounds', async (req: Request, res: Response) => {
         })
 
         // POST /api/outbounds/:code/pick 拣货完成（此时扣减库存）
-        router.post('/outbounds/:code/pick', async (req: Request, res: Response) => {
+  router.post('/outbounds/:code/pick', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
           const code = req.params.code
           await AppDataSource.transaction(async (mgr: EntityManager) => {
             const orderRepo = mgr.getRepository(OutboundOrder)
@@ -352,8 +368,21 @@ router.post('/inbounds', async (req: Request, res: Response) => {
 
   // 兼容：原立即入/出库接口（创建并直接过账）
 
+// 取消出库单（仅 DRAFT/APPROVED 可取消；PICKED 不允许）
+router.post('/outbounds/:code/cancel', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const code = req.params.code
+  const repo = AppDataSource.getRepository(OutboundOrder)
+  const order = await repo.findOne({ where: { code } })
+  if (!order) return res.status(404).json({ message: 'order not found' })
+  if (order.status === 'PICKED') return res.status(409).json({ message: 'already posted' })
+  if (order.status === 'CANCELLED') return res.json(order)
+  order.status = 'CANCELLED' as any
+  await repo.save(order)
+  res.json(order)
+})
+
 // POST /api/adjustments  盘点/调整：把某批次库存调整到指定数量
-router.post('/adjustments', async (req: Request, res: Response) => {
+router.post('/adjustments', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const { materialCode, warehouse, batchNo, targetQty, reason } = req.body || {}
   if (!materialCode || !warehouse || targetQty === undefined) {
     return res.status(400).json({ message: 'materialCode/warehouse/targetQty required' })
@@ -401,7 +430,7 @@ router.post('/adjustments', async (req: Request, res: Response) => {
 })
 
 // POST /api/outbounds
-router.post('/outbounds', async (req: Request, res: Response) => {
+router.post('/outbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const { code, purpose, items, warehouseCode } = req.body || {};
   if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' });
 
@@ -467,7 +496,7 @@ router.post('/outbounds', async (req: Request, res: Response) => {
 });
 
 // POST /api/transfers  移库/转移库存
-router.post('/transfers', async (req: Request, res: Response) => {
+router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const { materialCode, qty, fromWarehouse, fromBatchNo, toWarehouse, toLocation } = req.body || {}
   if (!materialCode || !qty || !fromWarehouse || !toWarehouse) {
     return res.status(400).json({ message: 'materialCode/qty/fromWarehouse/toWarehouse required' })

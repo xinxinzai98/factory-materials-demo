@@ -1,0 +1,56 @@
+/* 全局大气风格 */
+html, body, #root { height: 100%; }
+:root {
+  --bg-grad-start: #0f2a43;
+  --bg-grad-mid: #0b1e2d;
+  --bg-grad-end: #081521;
+  --text-main: #e6f4ff;
+  --text-sub: #c6daf7;
+  --card-bg: rgba(255,255,255,0.06);
+  --card-border: rgba(255,255,255,0.12);
+}
+.theme-light {
+  --bg-grad-start: #f7fbff;
+  --bg-grad-mid: #eef5fd;
+  --bg-grad-end: #e7f0fb;
+  --text-main: #1e293b;
+  --text-sub: #475569;
+  --card-bg: rgba(255,255,255,0.92);
+  --card-border: rgba(15,23,42,0.08);
+}
+body {
+  background: linear-gradient(135deg, var(--bg-grad-start) 0%, var(--bg-grad-mid) 40%, var(--bg-grad-end) 100%);
+}
+.ant-layout { background: transparent !important; }
+.app-header-title {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.glass-card {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.ant-card.glass-card .ant-card-head-title { color: var(--text-main); }
+.ant-card.glass-card .ant-card-head { border-bottom-color: var(--card-border) }
+.ant-typography, .ant-table { color: var(--text-main); }
+.ant-table { background: color-mix(in srgb, var(--card-bg) 95%, transparent); border-radius: 10px; }
+.ant-table-thead > tr > th { background: var(--card-bg) !important; color: var(--text-sub) !important; }
+.ant-menu-dark { background: rgba(0,0,0,0.45) !important; }
+.ant-menu-light { background: rgba(255,255,255,0.85) !important; }
+.ant-menu-light .ant-menu-item-selected { background: rgba(23,125,220,0.12) !important; }
+.ant-menu-light .ant-menu-item a, .ant-menu-light .ant-menu-item { color: #1e293b }
+.ant-menu-light .ant-menu-item:hover { background: rgba(23,125,220,0.08) }
+.ant-layout-sider { box-shadow: inset -1px 0 0 var(--card-border); }
+.header-actions { display: flex; gap: 12px; align-items: center; }
+.brand { color: var(--text-main); font-weight: 700; font-size: 16px; opacity: 0.9; }
+
+/* 英雄封面与流体背景 */
+.hero .hero-title { font-size: 44px; color: var(--text-main); margin: 0; letter-spacing: .5px; text-shadow: 0 6px 24px rgba(0,0,0,.35) }
+.hero .hero-sub { font-size: 16px; color: var(--text-sub); margin-top: 8px }
+.blob { position: absolute; width: 560px; height: 560px; border-radius: 50%; filter: blur(60px); opacity: .35; animation: float 14s ease-in-out infinite; }
+.blob.b1 { background: #177ddc; top: -80px; left: -120px }
+.blob.b2 { background: #22c55e; bottom: -120px; right: -40px; animation-delay: -3s }
+.blob.b3 { background: #f59f00; top: 10%; right: 25%; animation-delay: -6s }
+@keyframes float { 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(-24px) } }

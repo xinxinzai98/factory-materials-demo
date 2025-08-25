@@ -14,20 +14,22 @@ export default function OutboundDetailPage() {
 
   const approve = async () => { await api.post(`/outbounds/${code}/approve`); message.success('已审批'); load() }
   const pick = async () => { await api.post(`/outbounds/${code}/pick`); message.success('已拣货过账'); load() }
+  const cancel = async () => { await api.post(`/outbounds/${code}/cancel`); message.success('已取消'); load() }
 
   if (!data) return null
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-      <Card title={`出库单 ${code}`} extra={<Tag color={data.status==='DRAFT'?'default':data.status==='APPROVED'?'blue':'green'}>{data.status}</Tag>}>
+  <Card className="glass-card" title={`出库单 ${code}`} extra={<Tag color={data.status==='DRAFT'?'default':data.status==='APPROVED'?'blue':data.status==='PICKED'?'green':'red'}>{data.status}</Tag>}>
         <Descriptions size="small" column={2} bordered>
           <Descriptions.Item label="用途">{data.purpose}</Descriptions.Item>
         </Descriptions>
         <div style={{ marginTop: 12 }}>
           {data.status==='DRAFT' && <Button onClick={approve}>审批</Button>}
           {data.status==='APPROVED' && <Button type="primary" onClick={pick} style={{ marginLeft: 8 }}>拣货过账</Button>}
+          {(data.status==='DRAFT' || data.status==='APPROVED') && <Button danger onClick={cancel} style={{ marginLeft: 8 }}>取消</Button>}
         </div>
       </Card>
-      <Card title="明细">
+  <Card className="glass-card" title="明细">
         <Table rowKey="id" dataSource={data.items||[]} pagination={false}
           columns={[
             { title:'物料', dataIndex:'materialId' },
