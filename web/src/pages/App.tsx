@@ -1,5 +1,5 @@
 import React from 'react'
-import { Layout, Menu, theme, Typography, Button, Input, Modal, Avatar, Tag, Popover, Divider, Badge, List } from 'antd'
+import { Layout, Menu, theme, Typography, Button, Input, Modal, Avatar, Tag, Popover, Divider, Badge, List, Space } from 'antd'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { DatabaseOutlined, InboxOutlined, SendOutlined, SettingOutlined, SwapOutlined, ToolOutlined, DashboardOutlined, ExperimentOutlined, BellOutlined, SearchOutlined, MoonOutlined, SunOutlined, UserOutlined, RightOutlined, QuestionCircleOutlined, PlusSquareOutlined, CrownFilled, EyeOutlined } from '@ant-design/icons'
 import MaterialsPage from './Materials'
@@ -17,7 +17,7 @@ import LoginPage from './Login'
 import Splash from './Splash'
 import Dashboard from './Dashboard'
 import HelpPage from './Help'
-import { isTokenExpired } from '@/api/http'
+import { api, isTokenExpired } from '@/api/http'
 
 const { Header, Content, Sider } = Layout
 
@@ -45,12 +45,14 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
   const username = localStorage.getItem('username') || '未登录'
   const [userOpen, setUserOpen] = React.useState(false)
   const [notifOpen, setNotifOpen] = React.useState(false)
-  const notifications = React.useMemo(() => (
-    [
-      { id: 'n1', title: '库存预警', desc: 'M001 批次将于30天后到期', type: 'warning' },
-      { id: 'n2', title: '入库完成', desc: 'IN202508-001 上架完成', type: 'success' },
-    ]
-  ), [])
+  const [notifications, setNotifications] = React.useState<any[]>([])
+  const loadNotifications = React.useCallback(async ()=>{
+    try {
+      const { data } = await api.get('/notifications')
+      setNotifications((data||[]).map((n:any)=>({ id:n.id, title:n.title, desc:n.message, type:n.type, status:n.status })))
+    } catch {}
+  }, [])
+  React.useEffect(()=>{ if (authed) loadNotifications() }, [authed])
   if (!authed && loc.pathname === '/') {
     // 未登录且处于根路径：只显示封面页（独立页面，不渲染系统布局）
     return <Splash />
@@ -125,21 +127,23 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Input allowClear prefix={<SearchOutlined />} placeholder="全局搜索（物料/单号/批次）" style={{ width: 360 }} onPressEnter={(e)=>{ /* 预留搜索逻辑 */ }} />
             <Popover content={
-              <div style={{ width: 300 }}>
-                <List
-                  dataSource={notifications}
-                  renderItem={(n)=> (
-                    <List.Item>
-                      <List.Item.Meta
-                        title={n.title}
-                        description={n.desc}
-                      />
-                    </List.Item>
-                  )}
-                />
+              <div style={{ width: 320 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                  <div style={{ fontWeight: 600 }}>通知</div>
+                  <Space>
+                    <Button size="small" onClick={loadNotifications}>刷新</Button>
+                    <Button size="small" onClick={async()=>{ await api.post('/notifications/mark-all-read'); loadNotifications() }}>全部已读</Button>
+                  </Space>
+                </div>
+                <List dataSource={notifications} renderItem={(n)=> (
+                  <List.Item>
+                    <List.Item.Meta title={n.title} description={n.desc} />
+                    {n.status==='UNREAD' && <Tag color="red">未读</Tag>}
+                  </List.Item>
+                )} />
               </div>
             } trigger="click" open={notifOpen} onOpenChange={setNotifOpen}>
-              <Badge count={notifications.length} size="small">
+              <Badge count={notifications.filter(n=>n.status==='UNREAD').length} size="small">
                 <Button type="text" icon={<BellOutlined />} />
               </Badge>
             </Popover>

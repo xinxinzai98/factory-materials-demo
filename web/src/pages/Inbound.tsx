@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Card, Form, Input, InputNumber, Space, Table, message, DatePicker, Select } from 'antd'
 import dayjs from 'dayjs'
 import { api } from '@/api/http'
@@ -9,6 +9,16 @@ export default function InboundPage() {
   const [form] = Form.useForm()
   const [items, setItems] = useState<Item[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [suppliers, setSuppliers] = useState<{ value: string; label: string }[]>([])
+  const [warehouses, setWarehouses] = useState<{ value: string; label: string }[]>([{ value: 'WH1', label: '主仓' }])
+
+  useEffect(() => {
+    // 加载供应商列表
+    api.get('/suppliers', { params: { enabled: true } }).then(({ data }) => {
+      const opts = (data || []).map((s: any) => ({ value: s.name, label: `${s.code} - ${s.name}` }))
+      setSuppliers(opts)
+    }).catch(() => {})
+  }, [])
 
   const addItem = (it: Item) => {
     setItems((prev: Item[]) => [...prev, it])
@@ -38,9 +48,9 @@ export default function InboundPage() {
       <Card className="glass-card" title="入库单">
         <Form form={form} layout="inline">
           <Form.Item name="code" rules={[{ required: true }]}><Input placeholder="入库单号" /></Form.Item>
-          <Form.Item name="supplier"><Select placeholder="供应商" style={{ minWidth: 160 }} options={[{value:'供应商A',label:'供应商A'},{value:'供应商B',label:'供应商B'}]} /></Form.Item>
+          <Form.Item name="supplier"><Select placeholder="供应商" style={{ minWidth: 220 }} options={suppliers} allowClear showSearch /></Form.Item>
           <Form.Item name="arriveDate"><DatePicker placeholder="到货日期" /></Form.Item>
-          <Form.Item name="warehouseCode" initialValue="WH1"><Select placeholder="仓库名称" style={{ minWidth: 140 }} options={[{value:'WH1',label:'主仓'}]} /></Form.Item>
+          <Form.Item name="warehouseCode" initialValue="WH1"><Select placeholder="仓库名称" style={{ minWidth: 140 }} options={warehouses} /></Form.Item>
           <Form.Item><Button type="primary" onClick={submit} loading={submitting} disabled={items.length===0}>提交</Button></Form.Item>
         </Form>
       </Card>

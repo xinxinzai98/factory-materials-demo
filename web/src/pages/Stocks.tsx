@@ -40,6 +40,7 @@ export default function StocksPage() {
         <Form.Item name="warehouse"><Input placeholder="仓库编码" allowClear /></Form.Item>
         <Form.Item name="batchNo"><Input placeholder="批次" allowClear /></Form.Item>
         <Form.Item><Button htmlType="submit" type="primary">查询</Button></Form.Item>
+        <Form.Item><Button onClick={()=> window.open('/api/stocks.csv', '_blank')}>导出 CSV</Button></Form.Item>
       </Form>
 
   <Table rowKey={(r: StockRow)=> `${r.materialId}-${r.warehouse}-${r.batchNo}`} loading={loading} dataSource={data} pagination={false}

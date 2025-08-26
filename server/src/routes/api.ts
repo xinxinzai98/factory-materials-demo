@@ -13,7 +13,10 @@ import { InboundItem } from '../entities/InboundItem.js';
 import { OutboundItem } from '../entities/OutboundItem.js';
 import { Adjustment } from '../entities/Adjustment.js';
 import { User } from '../entities/User.js';
+import { Supplier } from '../entities/Supplier.js';
+import { Notification } from '../entities/Notification.js';
 import bcrypt from 'bcrypt';
+// no external csv lib; build simple CSV manually
 
 const router = Router();
 
@@ -64,6 +67,49 @@ router.post('/warehouses', requireRoles('ADMIN'), async (req: Request, res: Resp
   res.status(201).json(w);
 });
 
+// Suppliers
+router.get('/suppliers', async (req: Request, res: Response) => {
+  const q = (req.query.q as string || '').trim();
+  const enabled = req.query.enabled as string | undefined;
+  const repo = AppDataSource.getRepository(Supplier);
+  const qb = repo.createQueryBuilder('s');
+  if (q) qb.andWhere('(s.code ILIKE :q OR s.name ILIKE :q)', { q: `%${q}%` });
+  if (enabled !== undefined) qb.andWhere('s.enabled = :en', { en: enabled === 'true' });
+  qb.orderBy('s.updatedAt', 'DESC');
+  const data = await qb.getMany();
+  res.json(data);
+});
+router.post('/suppliers', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const { code, name, contact, enabled } = req.body || {};
+  if (!code || !name) return res.status(400).json({ message: 'code/name required' });
+  const repo = AppDataSource.getRepository(Supplier);
+  const exist = await repo.findOne({ where: { code } });
+  if (exist) return res.status(409).json({ message: 'supplier code exists' });
+  const s = repo.create({ code, name, contact: contact || null, enabled: enabled ?? true });
+  await repo.save(s);
+  res.status(201).json(s);
+});
+router.put('/suppliers/:code', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const code = req.params.code;
+  const repo = AppDataSource.getRepository(Supplier);
+  const s = await repo.findOne({ where: { code } });
+  if (!s) return res.status(404).json({ message: 'not found' });
+  const { name, contact, enabled } = req.body || {};
+  if (name !== undefined) s.name = name;
+  if (contact !== undefined) s.contact = contact;
+  if (enabled !== undefined) s.enabled = !!enabled;
+  await repo.save(s);
+  res.json(s);
+});
+router.delete('/suppliers/:code', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const code = req.params.code;
+  const repo = AppDataSource.getRepository(Supplier);
+  const s = await repo.findOne({ where: { code } });
+  if (!s) return res.status(404).json({ message: 'not found' });
+  await repo.remove(s);
+  res.json({ ok: true });
+});
+
 // GET /api/stocks
 router.get('/stocks', async (req: Request, res: Response) => {
   const materialCode = req.query.materialCode as string | undefined;
@@ -95,19 +141,61 @@ router.get('/stocks', async (req: Request, res: Response) => {
   res.json(data);
 });
 
+// 导出库存 CSV
+router.get('/stocks.csv', async (_req: Request, res: Response) => {
+  const stockRepo = AppDataSource.getRepository(Stock);
+  const rows = await stockRepo.createQueryBuilder('s')
+    .leftJoinAndSelect('s.material','m')
+    .leftJoinAndSelect('s.warehouse','w')
+    .leftJoinAndSelect('s.location','l')
+    .orderBy('m.code','ASC').addOrderBy('w.code','ASC').getMany();
+  const data = rows.map((r: Stock) => ({
+    materialCode: r.material.code,
+    warehouse: r.warehouse.code,
+    location: r.location?.code || '',
+    batchNo: r.batchNo,
+    expDate: r.expDate,
+    qtyOnHand: r.qtyOnHand,
+    qtyAllocated: r.qtyAllocated,
+  }));
+  const header = ['materialCode','warehouse','location','batchNo','expDate','qtyOnHand','qtyAllocated'];
+  const escape = (v: any) => {
+    const s = (v===null||v===undefined)?'':String(v)
+    return '"' + s.replace(/"/g,'""') + '"'
+  }
+  const csv = [header.join(',')].concat(data.map(r=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="stocks.csv"');
+  res.send('\ufeff' + csv);
+});
+
 // ------------------- 入库单：列表与流转 -------------------
 // GET /api/inbounds 列表
 router.get('/inbounds', async (req: Request, res: Response) => {
-  const page = +(req.query.page as string || 1)
-  const pageSize = +(req.query.pageSize as string || 20)
-  const repo = AppDataSource.getRepository(InboundOrder)
-  const [data, total] = await repo.findAndCount({
-    order: { createdAt: 'DESC' as any },
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-    relations: ['items'],
-  })
-  res.json({ data, page: { page, pageSize, total } })
+  const page = +(req.query.page as string || 1);
+  const pageSize = +(req.query.pageSize as string || 20);
+  const status = req.query.status as string | undefined;
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo = req.query.dateTo as string | undefined;
+  const code = req.query.code as string | undefined;
+  const repo = AppDataSource.getRepository(InboundOrder);
+  const qb = repo.createQueryBuilder('o').leftJoinAndSelect('o.items','it');
+  if (status) qb.andWhere('o.status = :st', { st: status });
+  if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
+  if (dateFrom) qb.andWhere('o.createdAt >= :df', { df: new Date(dateFrom) });
+  if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
+  qb.orderBy('o.createdAt','DESC').skip((page-1)*pageSize).take(pageSize);
+  const [data, total] = await qb.getManyAndCount();
+  res.json({ data, page: { page, pageSize, total } });
+})
+router.get('/inbounds.csv', async (_req: Request, res: Response) => {
+  const rows = await AppDataSource.getRepository(InboundOrder).createQueryBuilder('o').orderBy('o.createdAt','DESC').getMany();
+  const header = ['code','sourceType','supplier','status','createdAt']
+  const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"'
+  const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="inbounds.csv"');
+  res.send('\ufeff' + csv);
 })
 
 // POST /api/inbounds/draft 创建草稿（不动库存）
@@ -186,6 +274,9 @@ router.post('/inbounds/:code/putaway', requireRoles('ADMIN', 'OP'), async (req: 
     }
     order.status = 'PUTAWAY'
     await orderRepo.save(order)
+    // 通知：入库完成
+    const nRepo = mgr.getRepository(Notification)
+    await nRepo.save(nRepo.create({ type: 'success', title: '入库完成', message: `入库单 ${order.code} 上架完成`, status: 'UNREAD' as any }))
     const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
     res.json(saved)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
@@ -264,6 +355,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
       await mgr.getRepository(Stock).save(stock)
     }
     const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
+    await mgr.getRepository(Notification).save({ type: 'success', title: '入库完成', message: `入库单 ${code} 完成`, status: 'UNREAD' as any })
     res.status(201).json(saved)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
 })
@@ -271,16 +363,30 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
         // ------------------- 出库单：列表与流转 -------------------
         // GET /api/outbounds 列表
         router.get('/outbounds', async (req: Request, res: Response) => {
-          const page = +(req.query.page as string || 1)
-          const pageSize = +(req.query.pageSize as string || 20)
-          const repo = AppDataSource.getRepository(OutboundOrder)
-          const [data, total] = await repo.findAndCount({
-            order: { createdAt: 'DESC' as any },
-            skip: (page - 1) * pageSize,
-            take: pageSize,
-            relations: ['items'],
-          })
-          res.json({ data, page: { page, pageSize, total } })
+          const page = +(req.query.page as string || 1);
+          const pageSize = +(req.query.pageSize as string || 20);
+          const status = req.query.status as string | undefined;
+          const code = req.query.code as string | undefined;
+          const dateFrom = req.query.dateFrom as string | undefined;
+          const dateTo = req.query.dateTo as string | undefined;
+          const repo = AppDataSource.getRepository(OutboundOrder);
+          const qb = repo.createQueryBuilder('o').leftJoinAndSelect('o.items','it');
+          if (status) qb.andWhere('o.status = :st', { st: status });
+          if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
+          if (dateFrom) qb.andWhere('o.createdAt >= :df', { df: new Date(dateFrom) });
+          if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
+          qb.orderBy('o.createdAt','DESC').skip((page-1)*pageSize).take(pageSize);
+          const [data, total] = await qb.getManyAndCount();
+          res.json({ data, page: { page, pageSize, total } });
+        })
+        router.get('/outbounds.csv', async (_req: Request, res: Response) => {
+          const rows = await AppDataSource.getRepository(OutboundOrder).createQueryBuilder('o').orderBy('o.createdAt','DESC').getMany();
+          const header = ['code','purpose','status','createdAt']
+          const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"'
+          const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Content-Disposition', 'attachment; filename="outbounds.csv"');
+          res.send('\ufeff' + csv);
         })
 
         // POST /api/outbounds/draft 创建草稿（不动库存）
@@ -363,6 +469,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
             }
             order.status = 'PICKED'
             await orderRepo.save(order)
+            await mgr.getRepository(Notification).save({ type: 'success', title: '出库完成', message: `出库单 ${order.code} 已拣货过账`, status: 'UNREAD' as any })
             const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
             res.json(saved)
           }).catch((e: any) => res.status(400).json({ message: e.message }))
@@ -493,6 +600,7 @@ router.post('/outbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res:
     }
 
   const saved = await mgr.getRepository(OutboundOrder).findOne({ where: { id: order.id }, relations: ['items'] });
+    await mgr.getRepository(Notification).save({ type: 'success', title: '出库完成', message: `出库单 ${code} 完成`, status: 'UNREAD' as any })
     res.status(201).json(saved);
   }).catch((e: any) => res.status(400).json({ message: e.message }));
 });
@@ -566,6 +674,44 @@ router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res:
   }).catch((e: any) => res.status(400).json({ message: e.message }))
 })
 
+// ---------- Notifications ----------
+router.get('/notifications', async (req: Request, res: Response) => {
+  const status = (req.query.status as string | undefined) || undefined;
+  const repo = AppDataSource.getRepository(Notification);
+  const qb = repo.createQueryBuilder('n');
+  if (status) qb.andWhere('n.status = :st', { st: status });
+  qb.orderBy('n.createdAt','DESC');
+  const rows = await qb.getMany();
+  res.json(rows);
+});
+router.get('/notifications/unread-count', async (_req: Request, res: Response) => {
+  const repo = AppDataSource.getRepository(Notification);
+  const count = await repo.count({ where: { status: 'UNREAD' as any } });
+  res.json({ count });
+});
+router.post('/notifications', requireRoles('ADMIN','OP'), async (req: Request, res: Response) => {
+  const { type, title, message } = req.body || {};
+  if (!type || !title) return res.status(400).json({ message: 'type/title required' });
+  const repo = AppDataSource.getRepository(Notification);
+  const n = repo.create({ type, title, message: message || null, status: 'UNREAD' as any });
+  await repo.save(n);
+  res.status(201).json(n);
+});
+router.post('/notifications/:id/read', async (req: Request, res: Response) => {
+  const id = req.params.id;
+  const repo = AppDataSource.getRepository(Notification);
+  const n = await repo.findOne({ where: { id } });
+  if (!n) return res.status(404).json({ message: 'not found' });
+  n.status = 'READ' as any;
+  await repo.save(n);
+  res.json(n);
+});
+router.post('/notifications/mark-all-read', async (_req: Request, res: Response) => {
+  const repo = AppDataSource.getRepository(Notification);
+  await repo.createQueryBuilder().update(Notification).set({ status: 'READ' as any }).where('status = :st', { st: 'UNREAD' }).execute();
+  res.json({ ok: true });
+});
+
 // GET /api/orders/:code
 router.get('/orders/:code', async (req: Request, res: Response) => {
   const code = req.params.code;
@@ -581,6 +727,8 @@ router.post('/seed/dev', async (_req: Request, res: Response) => {
   const whRepo = AppDataSource.getRepository(Warehouse);
   const mRepo = AppDataSource.getRepository(Material);
   const uRepo = AppDataSource.getRepository(User);
+  const sRepo = AppDataSource.getRepository(Supplier);
+  const nRepo = AppDataSource.getRepository(Notification);
   let wh = await whRepo.findOne({ where: { code: 'WH1' } });
   if (!wh) wh = await whRepo.save(whRepo.create({ code: 'WH1', name: '主仓' }));
   let m = await mRepo.findOne({ where: { code: 'M001' } });
@@ -600,7 +748,25 @@ router.post('/seed/dev', async (_req: Request, res: Response) => {
     await ensureUser('op', 'OP'),
     await ensureUser('viewer', 'VIEWER'),
   ]
-  res.json({ warehouse: wh, material: m, users })
+  // seed suppliers
+  const ensureSupplier = async (code: string, name: string) => {
+    let s = await sRepo.findOne({ where: { code } });
+    if (!s) {
+      s = sRepo.create({ code, name, contact: null, enabled: true });
+      await sRepo.save(s);
+    }
+    return s;
+  };
+  const suppliers = [
+    await ensureSupplier('S001', '供应商A'),
+    await ensureSupplier('S002', '供应商B'),
+  ];
+  const notifCount = await nRepo.count();
+  if (notifCount === 0) {
+    await nRepo.save(nRepo.create({ type: 'warning', title: '库存预警', message: 'M001 某批次将于30天后到期', status: 'UNREAD' as any }));
+    await nRepo.save(nRepo.create({ type: 'success', title: '入库完成', message: '演示入库单已上架', status: 'UNREAD' as any }));
+  }
+  res.json({ warehouse: wh, material: m, users, suppliers })
 });
 
 export default router;

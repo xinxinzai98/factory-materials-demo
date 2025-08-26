@@ -11,6 +11,8 @@ import { OutboundOrder } from './entities/OutboundOrder.js';
 import { OutboundItem } from './entities/OutboundItem.js';
 import { User } from './entities/User.js';
 import { Adjustment } from './entities/Adjustment.js';
+import { Supplier } from './entities/Supplier.js';
+import { Notification } from './entities/Notification.js';
 
 dotenv.config();
 
@@ -27,6 +29,6 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_NAME || 'materials',
   synchronize: sync,
   logging: false,
-  entities: [Material, Warehouse, Location, Stock, InboundOrder, InboundItem, OutboundOrder, OutboundItem, User, Adjustment],
+  entities: [Material, Warehouse, Location, Stock, InboundOrder, InboundItem, OutboundOrder, OutboundItem, User, Adjustment, Supplier, Notification],
   migrations: [migrationsGlob],
 });
