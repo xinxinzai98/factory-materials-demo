@@ -1,7 +1,7 @@
 import React from 'react'
 import { Layout, Menu, theme, Typography, Button, Input, Modal, Avatar, Tag, Popover, Divider, Badge, List, Space } from 'antd'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { DatabaseOutlined, InboxOutlined, SendOutlined, SettingOutlined, SwapOutlined, ToolOutlined, DashboardOutlined, ExperimentOutlined, BellOutlined, SearchOutlined, MoonOutlined, SunOutlined, UserOutlined, RightOutlined, QuestionCircleOutlined, PlusSquareOutlined, CrownFilled, EyeOutlined } from '@ant-design/icons'
+import { DatabaseOutlined, InboxOutlined, SendOutlined, SettingOutlined, SwapOutlined, ToolOutlined, DashboardOutlined, ExperimentOutlined, BellOutlined, SearchOutlined, MoonOutlined, SunOutlined, UserOutlined, RightOutlined, QuestionCircleOutlined, PlusSquareOutlined, CrownFilled, EyeOutlined, BarChartOutlined } from '@ant-design/icons'
 import Splash from './Splash'
 const MaterialsPage = React.lazy(()=> import('@/pages/Materials'))
 const StocksPage = React.lazy(()=> import('@/pages/Stocks'))
@@ -18,6 +18,7 @@ const LoginPage = React.lazy(()=> import('@/pages/Login'))
 const Dashboard = React.lazy(()=> import('@/pages/Dashboard'))
 const HelpPage = React.lazy(()=> import('@/pages/Help'))
 const SearchResultsPage = React.lazy(()=> import('@/pages/SearchResults'))
+const AnalyticsPage = React.lazy(()=> import('@/pages/Analytics'))
 import { api, isTokenExpired } from '@/api/http'
 
 const { Header, Content, Sider } = Layout
@@ -30,6 +31,7 @@ const items = [
   { key: '/outbounds', icon: <SendOutlined />, label: <Link to="/outbounds">出库</Link> },
   { key: '/transfer', icon: <SwapOutlined />, label: <Link to="/transfer">移库</Link> },
   { key: '/adjust', icon: <ToolOutlined />, label: <Link to="/adjust">盘点</Link> },
+  { key: '/analytics', icon: <BarChartOutlined />, label: <Link to="/analytics">分析/报表</Link> },
   // 设置与帮助从侧栏移除，保留在右上角
 ]
 
@@ -88,6 +90,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
     if (pathname.startsWith('/transfer')) return '/transfer'
     if (pathname.startsWith('/adjust')) return '/adjust'
     if (pathname.startsWith('/dashboard')) return '/dashboard'
+  if (pathname.startsWith('/analytics')) return '/analytics'
     return ''
   })()
 
@@ -107,6 +110,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
   if (selectedKey === '/outbound-new') return '新建出库'
     if (selectedKey === '/transfer') return '移库'
     if (selectedKey === '/adjust') return '盘点'
+  if (selectedKey === '/analytics') return '分析/报表'
     if (pathname.startsWith('/settings')) return '设置'
     if (pathname.startsWith('/help')) return '帮助'
     return '工厂物料管理系统'
@@ -190,6 +194,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
             <Route path="/outbounds/:code" element={<OutboundDetailPage />} />
             <Route path="/transfer" element={<TransferPage />} />
             <Route path="/adjust" element={<AdjustPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
               <Route path="/help" element={<HelpPage />} />
             {/* 未登录则仅允许访问根封面与登录页 */}

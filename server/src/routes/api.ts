@@ -16,13 +16,11 @@ import { User } from '../entities/User.js';
 import { Supplier } from '../entities/Supplier.js';
 import { Notification } from '../entities/Notification.js';
 import bcrypt from 'bcrypt';
-import metricsRouter from './metrics.js';
 // no external csv lib; build simple CSV manually
 
 const router = Router();
 
 router.use(authGuard());
-router.use('/metrics', metricsRouter);
 
 // GET /api/materials
 router.get('/materials', async (req: Request, res: Response) => {
