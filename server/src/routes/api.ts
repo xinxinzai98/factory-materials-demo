@@ -918,6 +918,23 @@ router.post('/notifications/mark-all-read', async (_req: Request, res: Response)
   res.json({ ok: true });
 });
 
+// 导出通知 CSV（支持 status、type 筛选）
+router.get('/notifications.csv', async (req: Request, res: Response) => {
+  const status = (req.query.status as string | undefined) || undefined;
+  const type = (req.query.type as string | undefined) || undefined;
+  const repo = AppDataSource.getRepository(Notification);
+  const qb = repo.createQueryBuilder('n');
+  if (status) qb.andWhere('n.status = :st', { st: status });
+  if (type) qb.andWhere('n.type = :tp', { tp: type });
+  const rows = await qb.orderBy('n.createdAt','DESC').getMany();
+  const header = ['id','type','title','message','status','createdAt'];
+  const escape = (v: any) => '"' + String(v ?? '').replace(/"/g,'""') + '"';
+  const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="notifications.csv"');
+  res.send('\ufeff' + csv);
+});
+
 // ---------- Settings & Alerts ----------
 // GET/PUT 阈值设置 { globalMinQty: number, expiryDays: number }
 router.get('/settings/thresholds', async (_req: Request, res: Response) => {

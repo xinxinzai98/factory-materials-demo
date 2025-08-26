@@ -150,7 +150,16 @@ export default function Dashboard() {
           </Card>
         </Col>
         <Col xs={24} md={12}>
-      <Card className="glass-card" size="small" headStyle={{ padding: '8px 12px' }} bodyStyle={{ padding: 12 }} style={{ background: palette.cardBg }} title={<span style={{ color: palette.text }}>预警（未读）</span>} extra={<Button size="small" onClick={async () => { await api.post('/notifications/mark-all-read'); message.success('已全部标记为已读'); window.location.reload(); }}>全部已读</Button>}>
+          <Card className="glass-card" size="small" headStyle={{ padding: '8px 12px' }} bodyStyle={{ padding: 12 }} style={{ background: palette.cardBg }} title={<span style={{ color: palette.text }}>预警（未读）</span>} extra={
+            <Space size={8}>
+              <Button size="small" onClick={async () => {
+                // 导出当前筛选（默认未读、warning）
+                const url = `/api/notifications.csv?status=UNREAD&type=warning`
+                const a = document.createElement('a'); a.href = url; a.download = 'notifications.csv'; a.click();
+              }}>导出</Button>
+              <Button size="small" onClick={async () => { await api.post('/notifications/mark-all-read'); message.success('已全部标记为已读'); window.location.reload(); }}>全部已读</Button>
+            </Space>
+          }>
             <List
               size="small"
               dataSource={alerts}
