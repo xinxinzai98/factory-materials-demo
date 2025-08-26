@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Col, Row, Statistic, Button, List, Tag, Space, message } from 'antd';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '@/api/http';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [metrics, setMetrics] = useState<any>({});
   const [alerts, setAlerts] = useState<any[]>([]);
@@ -129,7 +130,7 @@ export default function Dashboard() {
                 return (
                   <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', color: palette.text }}>
                     <div style={{ width: '100%', height: h, background: 'linear-gradient(180deg, #f59f00, #f97316)', borderRadius: 4 }} />
-                    <div style={{ fontSize: 12, opacity: .8, marginTop: 6, textAlign: 'center', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.materialcode || r.materialCode || r.material || '—'}</div>
+                    <div style={{ fontSize: 12, opacity: .8, marginTop: 6, textAlign: 'center', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.materialCode || '—'}</div>
                   </div>
                 );
               })}
@@ -154,15 +155,26 @@ export default function Dashboard() {
               size="small"
               dataSource={alerts}
         locale={{ emptyText: <div style={{ padding: '12px 0', color: isLight ? '#666' : '#94a3b8' }}>暂无预警</div> }}
-              renderItem={(it: any) => (
-                <List.Item>
-                  <Space>
-                    <Tag color="orange">预警</Tag>
-                    <span>{it.title}</span>
-                    <span style={{ color: '#666' }}>{it.message}</span>
-                  </Space>
-                </List.Item>
-              )}
+              renderItem={(it: any) => {
+                const msg: string = it.message || ''
+                const inb = msg.match(/入库单\s(\S+)/)
+                const outb = msg.match(/出库单\s(\S+)/)
+                const go = async () => {
+                  try { if (it.id) await api.post(`/notifications/${it.id}/read`) } catch {}
+                  if (inb?.[1]) navigate(`/inbounds/${inb[1]}`)
+                  else if (outb?.[1]) navigate(`/outbounds/${outb[1]}`)
+                  else navigate('/stocks')
+                }
+                return (
+                  <List.Item onClick={go} style={{ cursor: 'pointer' }}>
+                    <Space>
+                      <Tag color="orange">预警</Tag>
+                      <span>{it.title}</span>
+                      <span style={{ color: '#666' }}>{it.message}</span>
+                    </Space>
+                  </List.Item>
+                )
+              }}
             />
           </Card>
         </Col>
