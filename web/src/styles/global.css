@@ -48,6 +48,16 @@ body {
 .header-actions { display: flex; gap: 12px; align-items: center; }
 .brand { color: var(--text-main); font-weight: 700; font-size: 16px; opacity: 0.9; }
 
+/* 侧边导航图标与文字间距更大一些 */
+.ant-menu .ant-menu-item .ant-menu-item-icon + span, 
+.ant-menu .ant-menu-submenu-title .ant-menu-item-icon + span {
+  margin-left: 12px;
+}
+
+/* 页面切换渐入效果 */
+.page-fade { animation: pagefade .24s ease-in-out; }
+@keyframes pagefade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
 /* 英雄封面与流体背景 */
 .hero .hero-title { font-size: 44px; color: var(--text-main); margin: 0; letter-spacing: .5px; text-shadow: 0 6px 24px rgba(0,0,0,.35) }
 .hero .hero-sub { font-size: 16px; color: var(--text-sub); margin-top: 8px }

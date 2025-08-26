@@ -17,6 +17,7 @@ export default function InboundsListPage() {
 
   useEffect(() => { load() }, [])
 
+
   const approve = async (code: string) => {
     await api.post(`/inbounds/${code}/approve`)
     message.success('已审批')
@@ -30,7 +31,7 @@ export default function InboundsListPage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-  <Card className="glass-card" title="入库单列表" extra={<a href="#/inbound-new">新建即时入库</a>}>
+  <Card className="glass-card" title="入库" extra={<Link to="/inbound-new">新建入库</Link>}>
         <Table rowKey="code" loading={loading} dataSource={rows}
           columns={[
             { title: '单号', dataIndex: 'code', render: (v: string) => <Link to={`/inbounds/${v}`}>{v}</Link> },

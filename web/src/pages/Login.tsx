@@ -8,6 +8,8 @@ export default function LoginPage() {
     try {
       const { data } = await api.post('/auth/login', v)
       localStorage.setItem('token', data.token)
+  if (data.user?.username) localStorage.setItem('username', data.user.username)
+  if (data.user?.role) localStorage.setItem('role', data.user.role)
       message.success('登录成功')
       nav('/')
     } catch (e: any) {

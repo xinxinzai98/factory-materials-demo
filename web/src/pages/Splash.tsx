@@ -17,6 +17,7 @@ export default function Splash() {
     try {
       const { data } = await api.post('/auth/login', v)
       localStorage.setItem('token', data.token)
+  if (data.user?.username) localStorage.setItem('username', data.user.username)
       if (data.user?.role) localStorage.setItem('role', data.user.role)
       message.success('登录成功')
       setOpen(false)
@@ -37,7 +38,7 @@ export default function Splash() {
           <Button type="primary" size="large" shape="round" onClick={onEnter}>点击进入</Button>
         </div>
       </div>
-      <Modal title="登录" open={open} onCancel={()=>setOpen(false)} footer={null} destroyOnClose>
+    <Modal title="登录" open={open} onCancel={()=>setOpen(false)} footer={null} destroyOnClose>
         <Form layout="vertical" onFinish={onLogin}>
           <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
             <Input autoFocus />
@@ -45,6 +46,7 @@ export default function Splash() {
           <Form.Item name="password" label="密码" rules={[{ required: true }]}>
             <Input.Password />
           </Form.Item>
+      <div style={{fontSize:12, color:'#888', marginBottom:8}}>默认账号：admin / op / viewer，密码均为 123456</div>
           <Button type="primary" htmlType="submit" block loading={loading}>登录</Button>
         </Form>
       </Modal>

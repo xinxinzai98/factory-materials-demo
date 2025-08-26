@@ -17,6 +17,7 @@ export default function OutboundsListPage() {
 
   useEffect(() => { load() }, [])
 
+
   const approve = async (code: string) => {
     await api.post(`/outbounds/${code}/approve`)
     message.success('已审批')
@@ -30,7 +31,7 @@ export default function OutboundsListPage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-  <Card className="glass-card" title="出库单列表" extra={<a href="#/outbound-new">新建即时出库</a>}>
+  <Card className="glass-card" title="出库" extra={<Link to="/outbound-new">新建出库</Link>}>
         <Table rowKey="code" loading={loading} dataSource={rows}
           columns={[
             { title: '单号', dataIndex: 'code', render: (v: string) => <Link to={`/outbounds/${v}`}>{v}</Link> },
