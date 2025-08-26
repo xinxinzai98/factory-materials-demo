@@ -9,6 +9,7 @@
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
+    "@ant-design/plots": "^2.6.3",
     "antd": "^5.18.0",
     "axios": "^1.7.4",
     "dayjs": "^1.11.11",

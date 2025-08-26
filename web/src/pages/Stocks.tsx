@@ -17,6 +17,7 @@ type StockRow = {
 export default function StocksPage() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<StockRow[]>([])
+  const [form] = Form.useForm()
 
   const fetchData = async (values?: any) => {
     setLoading(true)
@@ -35,12 +36,20 @@ export default function StocksPage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
-      <Form layout="inline" onFinish={fetchData}>
+  <Form layout="inline" onFinish={fetchData} id="stocksFilter" form={form}>
         <Form.Item name="materialCode"><Input placeholder="物料编码" allowClear /></Form.Item>
         <Form.Item name="warehouse"><Input placeholder="仓库编码" allowClear /></Form.Item>
         <Form.Item name="batchNo"><Input placeholder="批次" allowClear /></Form.Item>
         <Form.Item><Button htmlType="submit" type="primary">查询</Button></Form.Item>
-        <Form.Item><Button onClick={()=> window.open('/api/stocks.csv', '_blank')}>导出 CSV</Button></Form.Item>
+        <Form.Item>
+          <Button onClick={()=>{
+            const values = form.getFieldsValue()
+            const params: Record<string, string> = {}
+            Object.entries(values).forEach(([k, v])=> { if (v !== undefined && v !== null && String(v).length>0) params[k] = String(v) })
+            const sp = new URLSearchParams(params).toString()
+            window.open('/api/stocks.csv' + (sp?`?${sp}`:''), '_blank')
+          }}>导出 CSV</Button>
+        </Form.Item>
       </Form>
 
   <Table rowKey={(r: StockRow)=> `${r.materialId}-${r.warehouse}-${r.batchNo}`} loading={loading} dataSource={data} pagination={false}

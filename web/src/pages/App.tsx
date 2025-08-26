@@ -1,22 +1,23 @@
 import React from 'react'
 import { Layout, Menu, theme, Typography, Button, Input, Modal, Avatar, Tag, Popover, Divider, Badge, List, Space } from 'antd'
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { DatabaseOutlined, InboxOutlined, SendOutlined, SettingOutlined, SwapOutlined, ToolOutlined, DashboardOutlined, ExperimentOutlined, BellOutlined, SearchOutlined, MoonOutlined, SunOutlined, UserOutlined, RightOutlined, QuestionCircleOutlined, PlusSquareOutlined, CrownFilled, EyeOutlined } from '@ant-design/icons'
-import MaterialsPage from './Materials'
-import StocksPage from './Stocks'
-import InboundPage from './Inbound'
-import OutboundPage from './Outbound'
-import InboundListPage from './InboundsList'
-import OutboundListPage from './OutboundsList'
-import InboundDetailPage from './InboundDetail'
-import OutboundDetailPage from './OutboundDetail'
-import SettingsPage from './Settings'
-import TransferPage from './Transfer'
-import AdjustPage from './Adjust'
-import LoginPage from './Login'
 import Splash from './Splash'
-import Dashboard from './Dashboard'
-import HelpPage from './Help'
+const MaterialsPage = React.lazy(()=> import('@/pages/Materials'))
+const StocksPage = React.lazy(()=> import('@/pages/Stocks'))
+const InboundPage = React.lazy(()=> import('@/pages/Inbound'))
+const OutboundPage = React.lazy(()=> import('@/pages/Outbound'))
+const InboundListPage = React.lazy(()=> import('@/pages/InboundsList'))
+const OutboundListPage = React.lazy(()=> import('@/pages/OutboundsList'))
+const InboundDetailPage = React.lazy(()=> import('@/pages/InboundDetail'))
+const OutboundDetailPage = React.lazy(()=> import('@/pages/OutboundDetail'))
+const SettingsPage = React.lazy(()=> import('@/pages/Settings'))
+const TransferPage = React.lazy(()=> import('@/pages/Transfer'))
+const AdjustPage = React.lazy(()=> import('@/pages/Adjust'))
+const LoginPage = React.lazy(()=> import('@/pages/Login'))
+const Dashboard = React.lazy(()=> import('@/pages/Dashboard'))
+const HelpPage = React.lazy(()=> import('@/pages/Help'))
+const SearchResultsPage = React.lazy(()=> import('@/pages/SearchResults'))
 import { api, isTokenExpired } from '@/api/http'
 
 const { Header, Content, Sider } = Layout
@@ -35,6 +36,7 @@ const items = [
 type AppProps = { isDark?: boolean; onToggleTheme?: () => void }
 export default function App({ isDark, onToggleTheme }: AppProps) {
   const loc = useLocation()
+  const navigate = useNavigate()
   const { token } = theme.useToken()
   const role = (localStorage.getItem('role') || 'VIEWER') as 'ADMIN'|'OP'|'VIEWER'
   const rawToken = localStorage.getItem('token')
@@ -53,6 +55,24 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
     } catch {}
   }, [])
   React.useEffect(()=>{ if (authed) loadNotifications() }, [authed])
+  React.useEffect(()=>{
+    if (!authed) return
+    const t = setInterval(()=> loadNotifications(), 15000)
+    return ()=> clearInterval(t)
+  }, [authed, loadNotifications])
+  const onNotificationClick = async (n: any) => {
+    try {
+      await api.post(`/notifications/${n.id}/read`)
+    } catch {}
+    // 简单解析跳转
+    const msg: string = n.desc || ''
+    const inb = msg.match(/入库单\s(\S+)/)
+    const outb = msg.match(/出库单\s(\S+)/)
+    if (inb?.[1]) navigate(`/inbounds/${inb[1]}`)
+    else if (outb?.[1]) navigate(`/outbounds/${outb[1]}`)
+    else navigate('/stocks')
+    loadNotifications()
+  }
   if (!authed && loc.pathname === '/') {
     // 未登录且处于根路径：只显示封面页（独立页面，不渲染系统布局）
     return <Splash />
@@ -125,7 +145,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
         <Header style={{ background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 16, gap: 12 }}>
           <Typography.Title level={4} style={{ margin: 0 }} className="app-header-title">{pageTitle}</Typography.Title>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Input allowClear prefix={<SearchOutlined />} placeholder="全局搜索（物料/单号/批次）" style={{ width: 360 }} onPressEnter={(e)=>{ /* 预留搜索逻辑 */ }} />
+            <Input allowClear prefix={<SearchOutlined />} placeholder="全局搜索（物料/单号/批次）" style={{ width: 360 }} onPressEnter={(e)=>{ const kw=(e.target as HTMLInputElement).value.trim(); if(kw) navigate(`/search?q=${encodeURIComponent(kw)}`) }} />
             <Popover content={
               <div style={{ width: 320 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
@@ -136,7 +156,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
                   </Space>
                 </div>
                 <List dataSource={notifications} renderItem={(n)=> (
-                  <List.Item>
+                  <List.Item onClick={()=> onNotificationClick(n)} style={{ cursor: 'pointer', background: n.status==='UNREAD'?'rgba(255,77,79,0.06)':'transparent' }}>
                     <List.Item.Meta title={n.title} description={n.desc} />
                     {n.status==='UNREAD' && <Tag color="red">未读</Tag>}
                   </List.Item>
@@ -154,8 +174,10 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
         </Header>
         <Content style={{ margin: 16 }}>
           <div key={pathname} className="glass-card page-fade" style={{ padding: 16, borderRadius: 12 }}>
+            <React.Suspense fallback={<div style={{ padding: 24 }}>加载中...</div>}>
             <Routes>
             <Route path="/" element={<Splash />} />
+            <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/materials" element={<MaterialsPage />} />
@@ -173,6 +195,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
             {/* 未登录则仅允许访问根封面与登录页 */}
             {!authed && <Route path="*" element={<Navigate to="/" replace />} />}
             </Routes>
+            </React.Suspense>
           </div>
         </Content>
         {/* 用户详情弹窗 */}

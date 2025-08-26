@@ -4,6 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  esbuild: { drop: ['console','debugger'] },
   resolve: {
     alias: {
   '@': path.resolve(process.cwd(), 'src'),
@@ -31,4 +32,25 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    chunkSizeWarningLimit: 1200,
+  target: 'es2018',
+  minify: 'esbuild',
+  cssCodeSplit: true,
+  modulePreload: { polyfill: false },
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) return 'vendor-react'
+            if (id.includes('antd')) return 'vendor-antd'
+      if (id.includes('@ant-design/icons')) return 'vendor-icons'
+            if (id.includes('rc-') || id.includes('@rc-component')) return 'vendor-rc'
+            if (id.includes('dayjs')) return 'vendor-dayjs'
+            return 'vendor'
+          }
+        }
+      }
+    }
+  }
 })

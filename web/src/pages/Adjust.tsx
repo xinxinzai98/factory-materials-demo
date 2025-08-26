@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, InputNumber, message, Space } from 'antd'
+import { Button, Form, Input, InputNumber, message, Space } from 'antd'
 import { api } from '@/api/http'
 
 export default function AdjustPage() {
@@ -13,7 +13,7 @@ export default function AdjustPage() {
     }
   }
   return (
-    <Card title="盘点/调整库存">
+    <Space direction="vertical" style={{ width: '100%' }} size="large">
       <Form form={form} layout="vertical" onFinish={onFinish}>
         <Space.Compact block>
           <Form.Item name="materialCode" label="物料编码" rules={[{ required: true }]} style={{ flex: 1 }}>
@@ -36,6 +36,6 @@ export default function AdjustPage() {
         </Space.Compact>
         <Button type="primary" htmlType="submit">提交调整</Button>
       </Form>
-    </Card>
+    </Space>
   )
 }

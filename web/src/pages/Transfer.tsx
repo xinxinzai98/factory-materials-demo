@@ -1,4 +1,4 @@
-import { Button, Card, Form, Input, InputNumber, message, Space } from 'antd'
+import { Button, Form, Input, InputNumber, message, Space } from 'antd'
 import { api } from '@/api/http'
 
 export default function TransferPage() {
@@ -13,7 +13,7 @@ export default function TransferPage() {
     }
   }
   return (
-    <Card title="移库/转移库存">
+    <Space direction="vertical" style={{ width: '100%' }} size="large">
       <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ qty: 1 }}>
         <Space.Compact block>
           <Form.Item name="materialCode" label="物料编码" rules={[{ required: true }]} style={{ flex: 1 }}>
@@ -41,6 +41,6 @@ export default function TransferPage() {
         </Space.Compact>
         <Button type="primary" htmlType="submit">提交移库</Button>
       </Form>
-    </Card>
+    </Space>
   )
 }

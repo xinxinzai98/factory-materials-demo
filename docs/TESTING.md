@@ -29,3 +29,32 @@
 - 注册：POST /api/auth/register
 - 登录：POST /api/auth/login
 - 当前用户：GET /api/auth/me
+
+---
+
+## 新增功能详测
+
+### A. 入库/出库流转回归
+1) 入库草稿 → 审批 → 上架：参照接口清单，状态应依次为 DRAFT → APPROVED → PUTAWAY；库存增加。
+2) 出库草稿 → 审批 → 拣货：状态 DRAFT → APPROVED → PICKED；库存按策略扣减（指定批次或 FEFO）。
+
+### B. 导出 CSV（带筛选）
+- 入库：GET /api/inbounds.csv?status=APPROVED&dateFrom=2025-08-01&dateTo=2025-08-31
+- 出库：GET /api/outbounds.csv?status=PICKED
+- 库存：GET /api/stocks.csv?materialCode=M001&warehouse=WH1
+期待：下载 UTF-8 BOM CSV，数据与筛选一致。
+
+### C. 物料模板与导入
+1) 下载模板：GET /api/materials/template.csv
+2) 准备 CSV 文本（包含表头 code,name,uom,isBatch,shelfLifeDays）。
+3) 导入：POST /api/materials/import-csv  Body: {"csv":"<整段CSV文本>"}
+4) 期待：返回 created 列表；已存在 code 会跳过。
+
+### D. 阈值与临期预警
+1) 设置阈值：PUT /api/settings/thresholds {"globalMinQty":5,"expiryDays":30}
+2) 手动重算：POST /api/alerts/recalc
+3) 触发库存变化（入库/出库/调整/移库），系统会自动重算。
+4) 期待：
+	- 低库存生成“库存预警”通知；
+	- 到期 N 天内的批次生成“临期预警”通知；
+	- 通知中心可查看与“全部已读”。

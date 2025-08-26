@@ -16,11 +16,13 @@ import { User } from '../entities/User.js';
 import { Supplier } from '../entities/Supplier.js';
 import { Notification } from '../entities/Notification.js';
 import bcrypt from 'bcrypt';
+import metricsRouter from './metrics.js';
 // no external csv lib; build simple CSV manually
 
 const router = Router();
 
 router.use(authGuard());
+router.use('/metrics', metricsRouter);
 
 // GET /api/materials
 router.get('/materials', async (req: Request, res: Response) => {
@@ -53,6 +55,47 @@ router.post('/materials', requireRoles('ADMIN', 'OP'), async (req: Request, res:
   const m = repo.create({ code, name, uom, spec, category, barcode, isBatch: !!isBatch, shelfLifeDays: shelfLifeDays ?? null, enabled: enabled ?? true });
   await repo.save(m);
   res.status(201).json(m);
+});
+
+// 模板导出与导入（CSV）
+router.get('/materials/template.csv', async (_req: Request, res: Response) => {
+  const header = ['code','name','uom','isBatch','shelfLifeDays'];
+  const csv = header.join(',') + '\n' + 'M001,示例物料,PCS,true,365\n';
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="materials-template.csv"');
+  res.send('\ufeff' + csv);
+});
+router.post('/materials/import-csv', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const { csv } = req.body || {};
+  if (!csv || typeof csv !== 'string') return res.status(400).json({ message: 'csv required' });
+  const lines = csv.split(/\r?\n/).filter((l: string) => l.trim().length > 0);
+  if (lines.length <= 1) return res.status(400).json({ message: 'no rows' });
+  const header = lines[0].split(',').map((s)=> s.trim());
+  const idx = (k: string) => header.findIndex(h=> h===k);
+  const iCode = idx('code'), iName = idx('name'), iUom = idx('uom');
+  const iIsBatch = idx('isBatch'), iSL = idx('shelfLifeDays');
+  if (iCode<0 || iName<0 || iUom<0) return res.status(400).json({ message: 'header must include code,name,uom' });
+  const repo = AppDataSource.getRepository(Material);
+  const created: string[] = [];
+  const skipped: string[] = [];
+  const seen = new Set<string>();
+  for (let li=1; li<lines.length; li++) {
+    const cols = lines[li].split(',');
+    const code = (cols[iCode]||'').trim();
+    const name = (cols[iName]||'').trim();
+    const uom = (cols[iUom]||'').trim();
+    if (!code || !name || !uom) { skipped.push(code || `(row${li+1})`); continue; }
+    if (seen.has(code)) { skipped.push(code); continue; }
+    const isBatch = iIsBatch>=0 ? ((cols[iIsBatch]||'').trim().toLowerCase()==='true') : false;
+    const shelfLifeDays = iSL>=0 ? Number((cols[iSL]||'').trim()||0) : null;
+    const exist = await repo.findOne({ where: { code } });
+    if (exist) { skipped.push(code); continue; }
+    const m = repo.create({ code, name, uom, isBatch, shelfLifeDays: shelfLifeDays||null, enabled: true });
+    await repo.save(m);
+    created.push(code);
+    seen.add(code);
+  }
+  res.json({ ok: true, created, skipped, createdCount: created.length, skippedCount: skipped.length, total: lines.length - 1 });
 });
 
 // POST /api/warehouses
@@ -142,13 +185,19 @@ router.get('/stocks', async (req: Request, res: Response) => {
 });
 
 // 导出库存 CSV
-router.get('/stocks.csv', async (_req: Request, res: Response) => {
+router.get('/stocks.csv', async (req: Request, res: Response) => {
+  const materialCode = req.query.materialCode as string | undefined;
+  const warehouseCode = req.query.warehouse as string | undefined;
+  const batchNo = req.query.batchNo as string | undefined;
   const stockRepo = AppDataSource.getRepository(Stock);
-  const rows = await stockRepo.createQueryBuilder('s')
+  const qb = stockRepo.createQueryBuilder('s')
     .leftJoinAndSelect('s.material','m')
     .leftJoinAndSelect('s.warehouse','w')
-    .leftJoinAndSelect('s.location','l')
-    .orderBy('m.code','ASC').addOrderBy('w.code','ASC').getMany();
+    .leftJoinAndSelect('s.location','l');
+  if (materialCode) qb.andWhere('m.code = :mc', { mc: materialCode });
+  if (warehouseCode) qb.andWhere('w.code = :wc', { wc: warehouseCode });
+  if (batchNo) qb.andWhere('s.batchNo = :bn', { bn: batchNo });
+  const rows = await qb.orderBy('m.code','ASC').addOrderBy('w.code','ASC').getMany();
   const data = rows.map((r: Stock) => ({
     materialCode: r.material.code,
     warehouse: r.warehouse.code,
@@ -188,13 +237,55 @@ router.get('/inbounds', async (req: Request, res: Response) => {
   const [data, total] = await qb.getManyAndCount();
   res.json({ data, page: { page, pageSize, total } });
 })
-router.get('/inbounds.csv', async (_req: Request, res: Response) => {
-  const rows = await AppDataSource.getRepository(InboundOrder).createQueryBuilder('o').orderBy('o.createdAt','DESC').getMany();
+router.get('/inbounds.csv', async (req: Request, res: Response) => {
+  const status = req.query.status as string | undefined;
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo = req.query.dateTo as string | undefined;
+  const code = req.query.code as string | undefined;
+  const qb = AppDataSource.getRepository(InboundOrder).createQueryBuilder('o');
+  if (status) qb.andWhere('o.status = :st', { st: status });
+  if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
+  if (dateFrom) qb.andWhere('o.createdAt >= :df', { df: new Date(dateFrom) });
+  if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
+  const rows = await qb.orderBy('o.createdAt','DESC').getMany();
   const header = ['code','sourceType','supplier','status','createdAt']
   const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"'
   const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="inbounds.csv"');
+  res.send('\ufeff' + csv);
+})
+
+// 入库明细导出 CSV（按订单筛选条件展开为行）
+router.get('/inbound-items.csv', async (req: Request, res: Response) => {
+  const status = req.query.status as string | undefined;
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo = req.query.dateTo as string | undefined;
+  const code = req.query.code as string | undefined;
+  const qb = AppDataSource.getRepository(InboundOrder).createQueryBuilder('o')
+    .leftJoin('o.items','it')
+    .leftJoin('it.material','m')
+    .select([
+      'o.code AS code',
+      'o.status AS status',
+      'o.createdAt AS createdAt',
+      'o.sourceType AS sourceType',
+      'o.supplier AS supplier',
+      'm.code AS materialCode',
+      'it.qty AS qty',
+      'it.batchNo AS batchNo',
+      'it.expDate AS expDate',
+    ]);
+  if (status) qb.andWhere('o.status = :st', { st: status });
+  if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
+  if (dateFrom) qb.andWhere('o.createdAt >= :df', { df: new Date(dateFrom) });
+  if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
+  const rows = await qb.orderBy('o.createdAt','DESC').addOrderBy('o.code','ASC').getRawMany();
+  const header = ['code','status','createdAt','sourceType','supplier','materialCode','qty','batchNo','expDate'];
+  const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"';
+  const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="inbound-items.csv"');
   res.send('\ufeff' + csv);
 })
 
@@ -224,6 +315,42 @@ router.post('/inbounds/draft', requireRoles('ADMIN', 'OP'), async (req: Request,
     const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
     res.status(201).json(saved)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
+})
+
+// 更新入库草稿（替换明细）
+router.put('/inbounds/:code', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
+  const code = req.params.code
+  const { sourceType, supplier, arriveDate, items } = req.body || {}
+  await AppDataSource.transaction(async (mgr: EntityManager) => {
+    const orderRepo = mgr.getRepository(InboundOrder)
+    const itemRepo = mgr.getRepository(InboundItem)
+    const order = await orderRepo.findOne({ where: { code } })
+    if (!order) throw new Error('order not found')
+    if (order.status !== 'DRAFT') throw new Error('invalid status')
+    if (sourceType !== undefined) (order as any).sourceType = sourceType
+    if (supplier !== undefined) (order as any).supplier = supplier
+    if (arriveDate !== undefined) (order as any).arriveDate = arriveDate
+    await orderRepo.save(order)
+    if (Array.isArray(items)) {
+      const oldItems = await itemRepo.find({ where: { orderId: order.id } })
+      if (oldItems.length) await itemRepo.remove(oldItems)
+      for (const it of items) {
+        const material = await mgr.getRepository(Material).findOne({ where: { code: it.materialCode } })
+        if (!material) throw new Error(`material not found: ${it.materialCode}`)
+        const inboundItem = itemRepo.create({
+          orderId: order.id,
+          materialId: material.id,
+          qty: String(it.qty),
+          batchNo: it.batchNo || '',
+          expDate: it.expDate || null,
+          uprice: it.uprice ? String(it.uprice) : null,
+        })
+        await itemRepo.save(inboundItem)
+      }
+    }
+    const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
+    res.json(saved)
+  }).catch((e:any)=> res.status(400).json({ message: e.message }))
 })
 
 // POST /api/inbounds/:code/approve 审批（不动库存）
@@ -277,6 +404,7 @@ router.post('/inbounds/:code/putaway', requireRoles('ADMIN', 'OP'), async (req: 
     // 通知：入库完成
     const nRepo = mgr.getRepository(Notification)
     await nRepo.save(nRepo.create({ type: 'success', title: '入库完成', message: `入库单 ${order.code} 上架完成`, status: 'UNREAD' as any }))
+  await recalcAlerts(mgr)
     const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
     res.json(saved)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
@@ -354,8 +482,9 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
       stock.qtyOnHand = String(Number(stock.qtyOnHand) + Number(it.qty))
       await mgr.getRepository(Stock).save(stock)
     }
-    const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
-    await mgr.getRepository(Notification).save({ type: 'success', title: '入库完成', message: `入库单 ${code} 完成`, status: 'UNREAD' as any })
+  const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
+  await mgr.getRepository(Notification).save({ type: 'success', title: '入库完成', message: `入库单 ${code} 完成`, status: 'UNREAD' as any })
+  await recalcAlerts(mgr)
     res.status(201).json(saved)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
 })
@@ -379,13 +508,54 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           const [data, total] = await qb.getManyAndCount();
           res.json({ data, page: { page, pageSize, total } });
         })
-        router.get('/outbounds.csv', async (_req: Request, res: Response) => {
-          const rows = await AppDataSource.getRepository(OutboundOrder).createQueryBuilder('o').orderBy('o.createdAt','DESC').getMany();
+        router.get('/outbounds.csv', async (req: Request, res: Response) => {
+          const status = req.query.status as string | undefined;
+          const code = req.query.code as string | undefined;
+          const dateFrom = req.query.dateFrom as string | undefined;
+          const dateTo = req.query.dateTo as string | undefined;
+          const qb = AppDataSource.getRepository(OutboundOrder).createQueryBuilder('o');
+          if (status) qb.andWhere('o.status = :st', { st: status });
+          if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
+          if (dateFrom) qb.andWhere('o.createdAt >= :df', { df: new Date(dateFrom) });
+          if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
+          const rows = await qb.orderBy('o.createdAt','DESC').getMany();
           const header = ['code','purpose','status','createdAt']
           const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"'
           const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
           res.setHeader('Content-Type', 'text/csv; charset=utf-8');
           res.setHeader('Content-Disposition', 'attachment; filename="outbounds.csv"');
+          res.send('\ufeff' + csv);
+        })
+
+        // 出库明细导出 CSV（按订单筛选条件展开为行）
+        router.get('/outbound-items.csv', async (req: Request, res: Response) => {
+          const status = req.query.status as string | undefined;
+          const code = req.query.code as string | undefined;
+          const dateFrom = req.query.dateFrom as string | undefined;
+          const dateTo = req.query.dateTo as string | undefined;
+          const qb = AppDataSource.getRepository(OutboundOrder).createQueryBuilder('o')
+            .leftJoin('o.items','it')
+            .leftJoin('it.material','m')
+            .select([
+              'o.code AS code',
+              'o.status AS status',
+              'o.createdAt AS createdAt',
+              'o.purpose AS purpose',
+              'm.code AS materialCode',
+              'it.qty AS qty',
+              'it.batchPolicy AS batchPolicy',
+              'it.batchNo AS batchNo',
+            ]);
+          if (status) qb.andWhere('o.status = :st', { st: status });
+          if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
+          if (dateFrom) qb.andWhere('o.createdAt >= :df', { df: new Date(dateFrom) });
+          if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
+          const rows = await qb.orderBy('o.createdAt','DESC').addOrderBy('o.code','ASC').getRawMany();
+          const header = ['code','status','createdAt','purpose','materialCode','qty','batchPolicy','batchNo'];
+          const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"';
+          const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n');
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Content-Disposition', 'attachment; filename="outbound-items.csv"');
           res.send('\ufeff' + csv);
         })
 
@@ -415,6 +585,39 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           }).catch((e: any) => res.status(400).json({ message: e.message }))
         })
 
+        // 更新出库草稿（替换明细）
+  router.put('/outbounds/:code', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
+          const code = req.params.code
+          const { purpose, items } = req.body || {}
+          await AppDataSource.transaction(async (mgr: EntityManager) => {
+            const orderRepo = mgr.getRepository(OutboundOrder)
+            const itemRepo = mgr.getRepository(OutboundItem)
+            const order = await orderRepo.findOne({ where: { code } })
+            if (!order) throw new Error('order not found')
+            if (order.status !== 'DRAFT') throw new Error('invalid status')
+            if (purpose !== undefined) (order as any).purpose = purpose
+            await orderRepo.save(order)
+            if (Array.isArray(items)) {
+              const oldItems = await itemRepo.find({ where: { orderId: order.id } })
+              if (oldItems.length) await itemRepo.remove(oldItems)
+              for (const it of items) {
+                const material = await mgr.getRepository(Material).findOne({ where: { code: it.materialCode } })
+                if (!material) throw new Error(`material not found: ${it.materialCode}`)
+                const outItem = itemRepo.create({
+                  orderId: order.id,
+                  materialId: material.id,
+                  qty: String(it.qty),
+                  batchPolicy: (it.batchPolicy || 'SYSTEM'),
+                  batchNo: it.batchNo || null,
+                })
+                await itemRepo.save(outItem)
+              }
+            }
+            const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
+            res.json(saved)
+          }).catch((e:any)=> res.status(400).json({ message: e.message }))
+        })
+
         // POST /api/outbounds/:code/approve 审批（不动库存）
   router.post('/outbounds/:code/approve', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
           const code = req.params.code
@@ -427,7 +630,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           res.json(order)
         })
 
-        // POST /api/outbounds/:code/pick 拣货完成（此时扣减库存）
+  // POST /api/outbounds/:code/pick 拣货完成（此时扣减库存）
   router.post('/outbounds/:code/pick', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
           const code = req.params.code
           await AppDataSource.transaction(async (mgr: EntityManager) => {
@@ -470,6 +673,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
             order.status = 'PICKED'
             await orderRepo.save(order)
             await mgr.getRepository(Notification).save({ type: 'success', title: '出库完成', message: `出库单 ${order.code} 已拣货过账`, status: 'UNREAD' as any })
+            await recalcAlerts(mgr)
             const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
             res.json(saved)
           }).catch((e: any) => res.status(400).json({ message: e.message }))
@@ -533,8 +737,8 @@ router.post('/adjustments', requireRoles('ADMIN', 'OP'), async (req: Request, re
       reason: reason || null,
     })
     await mgr.getRepository(Adjustment).save(adj)
-
-    res.status(201).json(adj)
+  await recalcAlerts(mgr)
+  res.status(201).json(adj)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
 })
 
@@ -601,6 +805,7 @@ router.post('/outbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res:
 
   const saved = await mgr.getRepository(OutboundOrder).findOne({ where: { id: order.id }, relations: ['items'] });
     await mgr.getRepository(Notification).save({ type: 'success', title: '出库完成', message: `出库单 ${code} 完成`, status: 'UNREAD' as any })
+  await recalcAlerts(mgr)
     res.status(201).json(saved);
   }).catch((e: any) => res.status(400).json({ message: e.message }));
 });
@@ -670,16 +875,19 @@ router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res:
       await mgr.getRepository(Stock).save(t)
     }
 
-    res.status(201).json({ ok: true, moved: Number(qty) })
+  await recalcAlerts(mgr)
+  res.status(201).json({ ok: true, moved: Number(qty) })
   }).catch((e: any) => res.status(400).json({ message: e.message }))
 })
 
 // ---------- Notifications ----------
 router.get('/notifications', async (req: Request, res: Response) => {
   const status = (req.query.status as string | undefined) || undefined;
+  const type = (req.query.type as string | undefined) || undefined;
   const repo = AppDataSource.getRepository(Notification);
   const qb = repo.createQueryBuilder('n');
   if (status) qb.andWhere('n.status = :st', { st: status });
+  if (type) qb.andWhere('n.type = :tp', { tp: type });
   qb.orderBy('n.createdAt','DESC');
   const rows = await qb.getMany();
   res.json(rows);
@@ -712,15 +920,203 @@ router.post('/notifications/mark-all-read', async (_req: Request, res: Response)
   res.json({ ok: true });
 });
 
+// ---------- Settings & Alerts ----------
+// GET/PUT 阈值设置 { globalMinQty: number, expiryDays: number }
+router.get('/settings/thresholds', async (_req: Request, res: Response) => {
+  const row = await AppDataSource.query('SELECT v FROM app_settings WHERE k=$1', ['thresholds'])
+  const v0 = row?.[0]?.v || { globalMinQty: 0, expiryDays: 30, slowDays: 60 }
+  const v = { globalMinQty: Number(v0.globalMinQty||0), expiryDays: Number(v0.expiryDays||30), slowDays: Number(v0.slowDays||60) }
+  res.json(v)
+})
+router.put('/settings/thresholds', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const { globalMinQty, expiryDays, slowDays } = req.body || {}
+  const v = { globalMinQty: Number(globalMinQty||0), expiryDays: Number(expiryDays||30), slowDays: Number(slowDays||60) }
+  await AppDataSource.query('INSERT INTO app_settings(k, v) VALUES($1,$2) ON CONFLICT (k) DO UPDATE SET v=EXCLUDED.v, "updatedAt"=NOW()', ['thresholds', v])
+  res.json(v)
+})
+// 手动重算预警
+router.post('/alerts/recalc', requireRoles('ADMIN','OP'), async (_req: Request, res: Response) => {
+  await AppDataSource.transaction(async (mgr)=> {
+    await recalcAlerts(mgr)
+  })
+  res.json({ ok: true })
+})
+
+async function recalcAlerts(mgr: EntityManager) {
+  // 读取阈值
+  const row = await mgr.query('SELECT v FROM app_settings WHERE k=$1', ['thresholds'])
+  const { globalMinQty, expiryDays, slowDays } = row?.[0]?.v || { globalMinQty: 0, expiryDays: 30, slowDays: 60 }
+  const nRepo = mgr.getRepository(Notification)
+  // 低库存（按物料维度聚合）
+  const lowRows = await mgr.query(`
+    SELECT m.code AS material_code, COALESCE(SUM(s.qty_on_hand),0) AS qty
+    FROM materials m
+    LEFT JOIN stocks s ON s.material_id = m.id
+    GROUP BY m.code
+    HAVING COALESCE(SUM(s.qty_on_hand),0) < $1
+  `, [globalMinQty])
+  for (const r of lowRows) {
+    const title = '库存预警'
+    const message = `物料 ${r.material_code} 总在库 ${r.qty} 低于阈值 ${globalMinQty}`
+    const exist = await nRepo.findOne({ where: { title, message, status: 'UNREAD' as any } as any })
+    if (!exist) await nRepo.save(nRepo.create({ type: 'warning', title, message, status: 'UNREAD' as any }))
+  }
+  // 临期预警（到期日期在 N 天内且有库存）
+  const soon = await mgr.query(`
+    SELECT m.code AS material_code, s.batch_no, s.exp_date, s.qty_on_hand
+    FROM stocks s
+    JOIN materials m ON m.id = s.material_id
+    WHERE s.exp_date IS NOT NULL AND s.qty_on_hand > 0 AND s.exp_date <= (CURRENT_DATE + INTERVAL '${expiryDays} days')
+    ORDER BY s.exp_date ASC
+  `)
+  for (const r of soon) {
+    const title = '临期预警'
+    const message = `物料 ${r.material_code} 批次 ${r.batch_no} 将于 ${String(r.exp_date).slice(0,10)} 到期`
+    const exist = await nRepo.findOne({ where: { title, message, status: 'UNREAD' as any } as any })
+    if (!exist) await nRepo.save(nRepo.create({ type: 'warning', title, message, status: 'UNREAD' as any }))
+  }
+  // 滞销预警（slowDays 内无出库且当前有库存）
+  if (slowDays && Number(slowDays) > 0) {
+    const slowRows = await mgr.query(`
+      SELECT DISTINCT m.code AS material_code
+      FROM materials m
+      JOIN stocks s ON s.material_id = m.id
+      WHERE s.qty_on_hand > 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM outbound_items oi
+        JOIN outbound_orders oo ON oo.id = oi.order_id
+        WHERE oi.material_id = m.id AND oo."createdAt" >= (CURRENT_DATE - INTERVAL '${Number(slowDays)} days')
+      )
+    `)
+    for (const r of slowRows) {
+      const title = '滞销预警'
+      const message = `物料 ${r.material_code} 在近 ${Number(slowDays)} 天无出库且仍有库存`
+      const exist = await nRepo.findOne({ where: { title, message, status: 'UNREAD' as any } as any })
+      if (!exist) await nRepo.save(nRepo.create({ type: 'warning', title, message, status: 'UNREAD' as any }))
+    }
+  }
+}
+
 // GET /api/orders/:code
 router.get('/orders/:code', async (req: Request, res: Response) => {
   const code = req.params.code;
-  const inb = await AppDataSource.getRepository(InboundOrder).findOne({ where: { code }, relations: ['items'] });
+  const inb = await AppDataSource.getRepository(InboundOrder).findOne({ where: { code }, relations: ['items','items.material'] });
   if (inb) return res.json({ type: 'INBOUND', order: inb });
-  const outb = await AppDataSource.getRepository(OutboundOrder).findOne({ where: { code }, relations: ['items'] });
+  const outb = await AppDataSource.getRepository(OutboundOrder).findOne({ where: { code }, relations: ['items','items.material'] });
   if (outb) return res.json({ type: 'OUTBOUND', order: outb });
   return res.status(404).json({ message: 'order not found' });
 });
+
+// ---------- Metrics (Dashboard) ----------
+router.get('/metrics/dashboard', async (_req: Request, res: Response) => {
+  // thresholds
+  const row = await AppDataSource.query('SELECT v FROM app_settings WHERE k=$1', ['thresholds'])
+  const { expiryDays } = row?.[0]?.v || { globalMinQty: 0, expiryDays: 30 }
+
+  // materials count
+  const materialsCountRow = await AppDataSource.query('SELECT COUNT(1)::int AS cnt FROM materials')
+  const materialsCount = materialsCountRow?.[0]?.cnt || 0
+
+  // stocks total qty_on_hand
+  const stocksSumRow = await AppDataSource.query('SELECT COALESCE(SUM(qty_on_hand),0) AS sum FROM stocks')
+  const stocksQtyOnHand = Number(stocksSumRow?.[0]?.sum || 0)
+
+  // soon to expire batches count
+  const soonRows = await AppDataSource.query(`
+    SELECT COUNT(1)::int AS cnt
+    FROM stocks s
+    WHERE s.exp_date IS NOT NULL AND s.qty_on_hand > 0 AND s.exp_date <= (CURRENT_DATE + INTERVAL '${expiryDays} days')
+  `)
+  const soonToExpireBatches = soonRows?.[0]?.cnt || 0
+
+  // orders today
+  const inbToday = await AppDataSource.query(`SELECT COUNT(1)::int AS cnt FROM inbound_orders WHERE "createdAt" >= CURRENT_DATE`)
+  const outbToday = await AppDataSource.query(`SELECT COUNT(1)::int AS cnt FROM outbound_orders WHERE "createdAt" >= CURRENT_DATE`)
+  const inboundsToday = inbToday?.[0]?.cnt || 0
+  const outboundsToday = outbToday?.[0]?.cnt || 0
+
+  // unread notifications
+  const unreadRow = await AppDataSource.query(`SELECT COUNT(1)::int AS cnt FROM notifications WHERE status='UNREAD'`)
+  const unreadNotifications = unreadRow?.[0]?.cnt || 0
+
+  res.json({
+    materialsCount,
+    stocksQtyOnHand,
+    soonToExpireBatches,
+    inboundsToday,
+    outboundsToday,
+    unreadNotifications,
+    expiryDays
+  })
+})
+
+// Line chart trends: last N days inbound/outbound order counts
+router.get('/metrics/trends', async (req: Request, res: Response) => {
+  const days = Math.max(1, Math.min(90, Number(req.query.days || 14)))
+  const from = `CURRENT_DATE - INTERVAL '${days - 1} days'`
+  const inRows = await AppDataSource.query(`
+    SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
+    FROM inbound_orders WHERE "createdAt" >= ${from}
+    GROUP BY 1 ORDER BY 1
+  `)
+  const outRows = await AppDataSource.query(`
+    SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
+    FROM outbound_orders WHERE "createdAt" >= ${from}
+    GROUP BY 1 ORDER BY 1
+  `)
+  const today = new Date()
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+  const dates: string[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const dt = new Date(today)
+    dt.setDate(today.getDate() - i)
+    dates.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`)
+  }
+  const mapIn = new Map(inRows.map((r: any) => [r.d, r.c]))
+  const mapOut = new Map(outRows.map((r: any) => [r.d, r.c]))
+  const data = dates.map(d => ({ date: d, inbounds: mapIn.get(d) || 0, outbounds: mapOut.get(d) || 0 }))
+  res.json({ days, data })
+})
+
+// Bar chart: lowest total stocks by material (top N)
+router.get('/metrics/low-stocks', async (req: Request, res: Response) => {
+  const limit = Math.max(1, Math.min(20, Number(req.query.limit || 5)))
+  const rows = await AppDataSource.query(`
+    SELECT m.code AS materialCode, COALESCE(SUM(s.qty_on_hand),0) AS qty
+    FROM materials m LEFT JOIN stocks s ON s.material_id = m.id
+    GROUP BY m.code
+    ORDER BY COALESCE(SUM(s.qty_on_hand),0) ASC
+    LIMIT $1
+  `, [limit])
+  res.json(rows)
+})
+
+// ---------- Global Search ----------
+// GET /api/search?q=keyword
+router.get('/search', async (req: Request, res: Response) => {
+  const q = (req.query.q as string || '').trim()
+  if (!q) return res.json({ materials: [], orders: [], batches: [] })
+  const like = `%${q}%`
+  // materials by code/name/spec
+  const mats = await AppDataSource.query(`
+    SELECT code, name, spec, uom FROM materials
+    WHERE code ILIKE $1 OR name ILIKE $1 OR spec ILIKE $1
+    ORDER BY code ASC LIMIT 20
+  `, [like])
+  // orders by code match (inbound/outbound)
+  const inOrders = await AppDataSource.query(`SELECT code, 'INBOUND' AS type FROM inbound_orders WHERE code ILIKE $1 ORDER BY code DESC LIMIT 10`, [like])
+  const outOrders = await AppDataSource.query(`SELECT code, 'OUTBOUND' AS type FROM outbound_orders WHERE code ILIKE $1 ORDER BY code DESC LIMIT 10`, [like])
+  const orders = [...inOrders, ...outOrders]
+  // batches by batch_no match in stocks
+  const batches = await AppDataSource.query(`
+    SELECT DISTINCT s.batch_no AS batchNo, m.code AS materialCode, s.exp_date AS expDate
+    FROM stocks s JOIN materials m ON m.id = s.material_id
+    WHERE s.batch_no ILIKE $1
+    ORDER BY batchNo ASC LIMIT 20
+  `, [like])
+  res.json({ materials: mats, orders, batches })
+})
 
 // 开发环境快速种子：创建 WH1 仓库和一个示例物料 M001
 router.post('/seed/dev', async (_req: Request, res: Response) => {
