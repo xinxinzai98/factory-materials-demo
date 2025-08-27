@@ -38,3 +38,18 @@ export function isTokenExpired(token: string | null): boolean {
   if (!data?.exp) return false
   return Date.now() >= data.exp * 1000
 }
+
+// 轻量缓存（内存 + 1 分钟过期）
+type CacheEntry<T> = { ts: number; data: T }
+const _cache = new Map<string, CacheEntry<any>>()
+const TTL = 60 * 1000
+
+export async function cachedGet<T = any>(url: string, params?: Record<string, any>): Promise<T> {
+  const key = url + '::' + JSON.stringify(params || {})
+  const now = Date.now()
+  const hit = _cache.get(key)
+  if (hit && (now - hit.ts) < TTL) return hit.data as T
+  const { data } = await api.get(url, { params })
+  _cache.set(key, { ts: now, data })
+  return data as T
+}

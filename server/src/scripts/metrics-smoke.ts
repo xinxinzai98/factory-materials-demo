@@ -42,6 +42,14 @@ async function main() {
   const lcsv = await req('/metrics/low-stocks.csv?limit=5')
   console.log('  csv length:', (lcsv as string).length)
 
+  console.log('[smoke] warehouses')
+  const whs = await req('/warehouses')
+  console.log('  warehouses:', Array.isArray(whs)? whs.length: 0)
+
+  console.log('[smoke] locations?warehouse=WH1')
+  const locs = await req('/locations?warehouse=WH1')
+  console.log('  locations(WH1):', Array.isArray(locs)? locs.length: 0)
+
   console.log('OK')
 }
 

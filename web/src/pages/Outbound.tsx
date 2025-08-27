@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Form, Input, InputNumber, Radio, Space, Table, message, Select, Popconfirm, Tooltip, Typography } from 'antd'
-import { api } from '@/api/http'
+import { api, cachedGet } from '@/api/http'
 
 type Item = { materialCode: string; qty: number; batchPolicy?: 'SYSTEM' | 'SPECIFIED'; batchNo?: string }
 
@@ -72,8 +72,8 @@ export default function OutboundPage() {
   }
 
   useEffect(()=>{
-    api.get('/warehouses').then(({ data })=>{
-      const opts = (data || []).map((w:any)=> ({ value: w.code, label: `${w.code} - ${w.name||w.code}` }))
+    cachedGet('/warehouses').then((data:any)=>{
+      const opts = ((data as any) || []).map((w:any)=> ({ value: w.code, label: `${w.code} - ${w.name||w.code}` }))
       setWarehouses(opts)
     }).catch(()=>{})
   },[])

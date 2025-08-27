@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Form, Input, InputNumber, Space, Table, message, DatePicker, Select, Popconfirm, AutoComplete, Typography } from 'antd'
 import dayjs from 'dayjs'
-import { api } from '@/api/http'
+import { api, cachedGet } from '@/api/http'
 
 type Item = { materialCode: string; qty: number; batchNo?: string; expDate?: string; uprice?: number }
 
@@ -37,8 +37,8 @@ export default function InboundPage() {
       setSuppliers(opts)
     }).catch(() => {})
     // 加载仓库列表
-    api.get('/warehouses').then(({ data })=>{
-      const opts = (data || []).map((w:any)=> ({ value: w.code, label: `${w.code} - ${w.name||w.code}` }))
+    cachedGet('/warehouses').then((data:any)=>{
+      const opts = ((data as any) || []).map((w:any)=> ({ value: w.code, label: `${w.code} - ${w.name||w.code}` }))
       setWarehouses(opts)
     }).catch(()=>{})
   }, [])

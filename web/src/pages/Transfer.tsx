@@ -1,15 +1,17 @@
 import React from 'react'
 import { Button, Form, Input, InputNumber, message, Space, Select, AutoComplete, Typography } from 'antd'
-import { api } from '@/api/http'
+import { api, cachedGet } from '@/api/http'
+import { useNavigate } from 'react-router-dom'
 
 export default function TransferPage() {
   const [form] = Form.useForm()
+  const navigate = useNavigate()
   const [warehouses, setWarehouses] = React.useState<Array<{ value: string; label: string }>>([{ value: 'WH1', label: '主仓' }])
   const [locations, setLocations] = React.useState<Array<{ value: string; label: string }>>([])
   const [batchOpts, setBatchOpts] = React.useState<Array<{ value: string }>>([])
 
   React.useEffect(()=>{
-    api.get('/warehouses').then(({ data })=>{
+    cachedGet('/warehouses').then((data:any)=>{
       setWarehouses((data||[]).map((w:any)=> ({ value: w.code, label: `${w.code} - ${w.name||w.code}` })))
     }).catch(()=>{})
   },[])
@@ -17,8 +19,8 @@ export default function TransferPage() {
   const loadLocations = async (warehouseCode?: string) => {
     const wc = (warehouseCode||'').trim(); if (!wc) { setLocations([]); return }
     try {
-      const { data } = await api.get('/locations', { params: { warehouse: wc, enabled: true } })
-      setLocations((data||[]).map((l:any)=> ({ value: l.code, label: `${l.code}${l.zone? ' - '+l.zone: ''}` })))
+  const data = await cachedGet('/locations', { warehouse: wc, enabled: true })
+  setLocations(((data as any)||[]).map((l:any)=> ({ value: l.code, label: `${l.code}${l.zone? ' - '+l.zone: ''}` })))
     } catch { setLocations([]) }
   }
 
@@ -26,8 +28,8 @@ export default function TransferPage() {
     const mc = (materialCode || '').trim(); if (!mc) { setBatchOpts([]); return }
     const wc = (warehouseCode || form.getFieldValue('fromWarehouse') || 'WH1').trim()
     try {
-      const { data } = await api.get('/stocks', { params: { materialCode: mc, warehouse: wc } })
-      const rows = Array.isArray(data)? data: []
+  const data = await cachedGet('/stocks', { materialCode: mc, warehouse: wc })
+  const rows = Array.isArray(data)? data: []
       rows.sort((a:any,b:any)=>{
         const ax = a.expDate? new Date(a.expDate).getTime(): Number.MAX_SAFE_INTEGER
         const bx = b.expDate? new Date(b.expDate).getTime(): Number.MAX_SAFE_INTEGER
@@ -46,6 +48,12 @@ export default function TransferPage() {
       await api.post('/transfers', v)
       message.success('移库成功')
       form.resetFields()
+      const v0 = form.getFieldsValue()
+      // 跳转到库存页并预置筛选条件（materialCode + toWarehouse）
+      const params = new URLSearchParams()
+      if (v0.materialCode) params.set('materialCode', v0.materialCode)
+      if (v0.toWarehouse) params.set('warehouse', v0.toWarehouse)
+      navigate(`/stocks?${params.toString()}`)
     } catch (e: any) {
       message.error(e?.response?.data?.message || '移库失败')
     }
