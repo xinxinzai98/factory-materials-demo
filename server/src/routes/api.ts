@@ -280,7 +280,8 @@ router.get('/inbounds.csv', async (req: Request, res: Response) => {
   if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
   const rows = await qb.orderBy('o.createdAt','DESC').getMany();
   const header = ['code','sourceType','supplier','status','createdAt']
-  const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"'
+  const fmt = (v: any) => v instanceof Date ? v.toISOString() : v
+  const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
   const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="inbounds.csv"');
@@ -313,7 +314,8 @@ router.get('/inbound-items.csv', async (req: Request, res: Response) => {
   if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
   const rows = await qb.orderBy('o.createdAt','DESC').addOrderBy('o.code','ASC').getRawMany();
   const header = ['code','status','createdAt','sourceType','supplier','materialCode','qty','batchNo','expDate'];
-  const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"';
+  const fmt = (v: any) => v instanceof Date ? v.toISOString() : v
+  const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"';
   const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="inbound-items.csv"');
@@ -567,7 +569,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           const [data, total] = await qb.getManyAndCount();
           res.json({ data, page: { page, pageSize, total } });
         })
-        router.get('/outbounds.csv', async (req: Request, res: Response) => {
+  router.get('/outbounds.csv', async (req: Request, res: Response) => {
           const status = req.query.status as string | undefined;
           const code = req.query.code as string | undefined;
           const dateFrom = req.query.dateFrom as string | undefined;
@@ -579,7 +581,8 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
           const rows = await qb.orderBy('o.createdAt','DESC').getMany();
           const header = ['code','purpose','status','createdAt']
-          const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"'
+          const fmt = (v: any) => v instanceof Date ? v.toISOString() : v
+          const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
           const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
           res.setHeader('Content-Type', 'text/csv; charset=utf-8');
           res.setHeader('Content-Disposition', 'attachment; filename="outbounds.csv"');
@@ -587,7 +590,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
         })
 
         // 出库明细导出 CSV（按订单筛选条件展开为行）
-        router.get('/outbound-items.csv', async (req: Request, res: Response) => {
+  router.get('/outbound-items.csv', async (req: Request, res: Response) => {
           const status = req.query.status as string | undefined;
           const code = req.query.code as string | undefined;
           const dateFrom = req.query.dateFrom as string | undefined;
@@ -611,7 +614,8 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
           const rows = await qb.orderBy('o.createdAt','DESC').addOrderBy('o.code','ASC').getRawMany();
           const header = ['code','status','createdAt','purpose','materialCode','qty','batchPolicy','batchNo'];
-          const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"';
+          const fmt = (v: any) => v instanceof Date ? v.toISOString() : v
+          const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"';
           const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n');
           res.setHeader('Content-Type', 'text/csv; charset=utf-8');
           res.setHeader('Content-Disposition', 'attachment; filename="outbound-items.csv"');
@@ -1026,7 +1030,8 @@ router.get('/notifications.csv', async (req: Request, res: Response) => {
   if (type) qb.andWhere('n.type = :tp', { tp: type });
   const rows = await qb.orderBy('n.createdAt','DESC').getMany();
   const header = ['id','type','title','message','status','createdAt'];
-  const escape = (v: any) => '"' + String(v ?? '').replace(/"/g,'""') + '"';
+  const fmt = (v: any) => v instanceof Date ? v.toISOString() : v
+  const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
   const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="notifications.csv"');

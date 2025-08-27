@@ -10,6 +10,7 @@
   "smoke:metrics": "tsx src/scripts/metrics-smoke.ts",
     "test:metrics": "tsx src/scripts/metrics-tests.ts",
   "test:export-parity": "tsx src/scripts/export-parity.ts",
+  "test:export-format": "tsx src/scripts/export-format.ts",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts",
     "migration:run": "npm run build && node ./node_modules/typeorm/cli.js migration:run -d dist/data-source.js",
     "migration:revert": "npm run build && node ./node_modules/typeorm/cli.js migration:revert -d dist/data-source.js"

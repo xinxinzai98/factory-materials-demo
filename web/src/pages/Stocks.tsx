@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Button, Form, Input, Space, Table, message, Modal, Checkbox } from 'antd'
 import { api } from '@/api/http'
+import { tsSuffix } from '@/utils/time'
 import { exportToExcel } from '@/utils/exportExcel'
 
 type StockRow = {
@@ -80,7 +81,7 @@ export default function StocksPage() {
           }}>导出 CSV</Button>
         </Form.Item>
         <Form.Item>
-          <Button type="default" onClick={()=>{ setSelectedFields(allFields.map(f=> f.key as string)); setExcelOpen(true) }}>导出 Excel</Button>
+          <Button type="default" onClick={()=>{ setSelectedFields(allFields.map(f=> f.key as string)); setExcelOpen(true); void import('xlsx').catch(()=>{}) }}>导出 Excel</Button>
         </Form.Item>
       </Form>
 
@@ -106,7 +107,7 @@ export default function StocksPage() {
           return obj
         })
         try {
-          await exportToExcel('库存明细.xlsx', rows)
+          await exportToExcel(`库存明细-${tsSuffix()}.xlsx`, rows)
         } catch (e) {
           message.error('导出失败')
         }
