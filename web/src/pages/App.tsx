@@ -99,9 +99,21 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
     const msg: string = n.desc || ''
     const inb = msg.match(/入库单\s(\S+)/)
     const outb = msg.match(/出库单\s(\S+)/)
-    if (inb?.[1]) navigate(`/inbounds/${inb[1]}`)
-    else if (outb?.[1]) navigate(`/outbounds/${outb[1]}`)
-    else navigate('/stocks')
+    if (inb?.[1]) {
+      navigate(`/inbounds/${inb[1]}`)
+    } else if (outb?.[1]) {
+      navigate(`/outbounds/${outb[1]}`)
+    } else {
+      // 处理库存/临期/滞销等预警：从文案中提取物料与批次，跳转到库存页并带筛选
+      const mat = msg.match(/物料\s([A-Za-z0-9_-]+)/)
+      const batch = msg.match(/批次\s([^\s]+)/)
+      if (mat?.[1]) {
+        const sp = new URLSearchParams({ materialCode: mat[1], ...(batch?.[1]?{ batchNo: batch[1] }: {}) }).toString()
+        navigate(`/stocks?${sp}`)
+      } else {
+        navigate('/stocks')
+      }
+    }
     loadNotifications()
   }
   if (!authed && loc.pathname === '/') {

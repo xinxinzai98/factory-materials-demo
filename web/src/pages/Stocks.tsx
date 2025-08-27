@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Button, Form, Input, Space, Table, message, Modal, Checkbox } from 'antd'
 import { api } from '@/api/http'
 import { exportToExcel } from '@/utils/exportExcel'
@@ -16,6 +17,7 @@ type StockRow = {
 }
 
 export default function StocksPage() {
+  const location = useLocation()
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<StockRow[]>([])
   const [form] = Form.useForm()
@@ -45,7 +47,21 @@ export default function StocksPage() {
     }
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => {
+    // 首次渲染：读取 URL 查询参数预填筛选（支持 materialCode、warehouse、batchNo）
+    const usp = new URLSearchParams(location.search)
+    const initial: any = {}
+    if (usp.get('materialCode')) initial.materialCode = usp.get('materialCode')
+    if (usp.get('warehouse')) initial.warehouse = usp.get('warehouse')
+    if (usp.get('batchNo')) initial.batchNo = usp.get('batchNo')
+    if (Object.keys(initial).length) {
+      form.setFieldsValue(initial)
+      fetchData(initial)
+    } else {
+      fetchData()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
