@@ -9,6 +9,38 @@
   - 主题：深/浅主题切换与玻璃拟态样式
 - 部署/开发：Dockerfile（后端）、docker-compose（DB+API），一键脚本 `scripts/start-dev.sh`
 
+## 分析与报表（Analytics）
+- 页面：`/analytics`（前端 `web/src/pages/Analytics.tsx`）
+  - 关键指标卡片：物料数、库存总量、临期批次数（阈值内）、低库存物料数、滞销物料数、未读预警数
+  - 趋势：
+    - 日趋势（最近 N 天，默认 30 天）与周趋势（最近 N 周，默认 12 周）切换
+    - 支持筛选并带参导出 CSV
+  - 低库存 Top N：支持按仓库与关键字筛选并导出 CSV
+- 后端接口（均位于 `server/src/routes/api.ts`）：
+  - KPIs 概览：`GET /api/metrics/dashboard`
+  - 日趋势：`GET /api/metrics/trends`，导出：`GET /api/metrics/trends.csv`
+  - 周趋势：`GET /api/metrics/weekly`，导出：`GET /api/metrics/weekly.csv`
+  - 低库存 TopN：`GET /api/metrics/low-stocks`，导出：`GET /api/metrics/low-stocks.csv`
+- 筛选与参数约定：
+  - 通用日期：`dateFrom`、`dateTo`（YYYY-MM-DD，可任选其一）
+  - 趋势：`days`（1-90，默认30）、`weeks`（1-52，默认12）、`materialCode`（精确匹配）
+  - 低库存：`limit`（默认10）、`warehouse`（仓库code）、`q`（物料编码/名称模糊）
+  - 导出 CSV 与查询接口参数一致，可直接拼接查询串
+
+## 指标口径定义
+- 全局阈值来源：`app_settings` 表中的 `thresholds` JSON，形如 `{ globalMinQty, expiryDays, slowDays }`
+  - `globalMinQty`：最低安全库存阈值（用于低库存统计）
+  - `expiryDays`：临期天数阈值（如 30 天内到期为临期）
+  - `slowDays`：滞销天数阈值（如 60 天内无出库视为滞销）
+- KPIs：
+  - `materialsCount`：`materials` 总数
+  - `stocksQtyOnHand`：`stocks.qty_on_hand` 全量求和
+  - `soonToExpireBatches`：`exp_date` 在 `expiryDays` 天内且 `qty_on_hand > 0` 的批次数
+  - `inboundsToday`、`outboundsToday`：当日创建的入库单/出库单数量
+  - `unreadNotifications`：未读通知数量
+  - `lowStockMaterials`：按物料聚合总在库量，`sum(qty_on_hand) < globalMinQty` 的物料数量
+  - `slowMaterials`：当前有存量但 `slowDays` 内没有任何出库记录的物料数量
+
 ## 鉴权与 RBAC
 - 访问保护：所有 /api 路由默认使用 `authGuard`，支持 X-API-Key 或 JWT
 - 角色权限：

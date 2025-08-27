@@ -108,6 +108,15 @@ router.post('/warehouses', requireRoles('ADMIN'), async (req: Request, res: Resp
   res.status(201).json(w);
 });
 
+// GET /api/warehouses 列表（用于筛选）
+router.get('/warehouses', async (_req: Request, res: Response) => {
+  const rows = await AppDataSource.getRepository(Warehouse)
+    .createQueryBuilder('w')
+    .orderBy('w.code','ASC')
+    .getMany();
+  res.json(rows.map(w => ({ code: w.code, name: (w as any).name || w.code, enabled: (w as any).enabled })));
+});
+
 // Suppliers
 router.get('/suppliers', async (req: Request, res: Response) => {
   const q = (req.query.q as string || '').trim();
@@ -149,15 +158,6 @@ router.delete('/suppliers/:code', requireRoles('ADMIN'), async (req: Request, re
   if (!s) return res.status(404).json({ message: 'not found' });
   await repo.remove(s);
   res.json({ ok: true });
-});
-
-// Warehouses list
-router.get('/warehouses', async (req: Request, res: Response) => {
-  const enabled = req.query.enabled as string | undefined;
-  const qb = AppDataSource.getRepository(Warehouse).createQueryBuilder('w');
-  if (enabled !== undefined) qb.andWhere('w.enabled = :en', { en: enabled === 'true' });
-  const data = await qb.orderBy('w.code','ASC').getMany();
-  res.json(data);
 });
 
 // GET /api/stocks
@@ -1109,31 +1109,77 @@ router.get('/metrics/dashboard', async (_req: Request, res: Response) => {
 
 // Line chart trends: last N days inbound/outbound order counts
 router.get('/metrics/trends', async (req: Request, res: Response) => {
-  const days = Math.max(1, Math.min(90, Number(req.query.days || 14)))
+  const days = Math.max(1, Math.min(90, Number((req.query.days as any) || 14)))
   const dateFrom = (req.query.dateFrom as string | undefined)
   const dateTo = (req.query.dateTo as string | undefined)
   const materialCode = (req.query.materialCode as string | undefined)
-  const fromExpr = dateFrom ? `'${dateFrom}'` : `CURRENT_DATE - INTERVAL '${days - 1} days'`
-  const toFilter = dateTo ? ` AND "createdAt" <= '${dateTo}'` : ''
-  const materialFilterIn = materialCode ? ` AND EXISTS (SELECT 1 FROM inbound_items it JOIN materials m ON m.id=it.material_id WHERE it.order_id = inbound_orders.id AND m.code = '${materialCode}')` : ''
-  const materialFilterOut = materialCode ? ` AND EXISTS (SELECT 1 FROM outbound_items it JOIN materials m ON m.id=it.material_id WHERE it.order_id = outbound_orders.id AND m.code = '${materialCode}')` : ''
-  const inRows = await AppDataSource.query(`
-    SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
-    FROM inbound_orders WHERE "createdAt" >= ${fromExpr}${toFilter}${materialFilterIn}
-    GROUP BY 1 ORDER BY 1
-  `)
-  const outRows = await AppDataSource.query(`
-    SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
-    FROM outbound_orders WHERE "createdAt" >= ${fromExpr}${toFilter}${materialFilterOut}
-    GROUP BY 1 ORDER BY 1
-  `)
-  const today = new Date()
-  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+
+  // 构造时间范围
+  let cond = ''
+  const params: any[] = []
+  if (dateFrom) { cond += (cond? ' AND ': '') + `o."createdAt" >= $${params.length+1}`; params.push(new Date(dateFrom)) }
+  if (dateTo) { cond += (cond? ' AND ': '') + `o."createdAt" <= $${params.length+1}`; params.push(new Date(dateTo)) }
+  if (!cond) {
+    cond = `o."createdAt" >= CURRENT_DATE - INTERVAL '${days - 1} days'`
+  }
+
+  let inRows: any[] = []
+  let outRows: any[] = []
+  if (materialCode) {
+    // 按包含该物料的订单数量（日），去重计数
+    inRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(DISTINCT o.id)::int AS c
+       FROM inbound_orders o
+       JOIN inbound_items it ON it.order_id = o.id
+       JOIN materials m ON m.id = it.material_id
+       WHERE ${cond} AND m.code = $${params.length+1}
+       GROUP BY 1 ORDER BY 1`,
+      [...params, materialCode]
+    )
+    outRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(DISTINCT o.id)::int AS c
+       FROM outbound_orders o
+       JOIN outbound_items it ON it.order_id = o.id
+       JOIN materials m ON m.id = it.material_id
+       WHERE ${cond} AND m.code = $${params.length+1}
+       GROUP BY 1 ORDER BY 1`,
+      [...params, materialCode]
+    )
+  } else {
+    inRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
+       FROM inbound_orders o
+       WHERE ${cond}
+       GROUP BY 1 ORDER BY 1`,
+      params
+    )
+    outRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
+       FROM outbound_orders o
+       WHERE ${cond}
+       GROUP BY 1 ORDER BY 1`,
+      params
+    )
+  }
+
+  // 生成日期序列（若传入 dateFrom/dateTo，则按该范围）
   const dates: string[] = []
-  for (let i = days - 1; i >= 0; i--) {
-    const dt = new Date(today)
-    dt.setDate(today.getDate() - i)
-    dates.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`)
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+  if (dateFrom || dateTo) {
+    const start = dateFrom ? new Date(dateFrom) : new Date()
+    const end = dateTo ? new Date(dateTo) : new Date()
+    const d0 = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const d1 = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+    for (let d = d0; d <= d1; d = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)) {
+      dates.push(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`)
+    }
+  } else {
+    const today = new Date()
+    for (let i = days - 1; i >= 0; i--) {
+      const dt = new Date(today)
+      dt.setDate(today.getDate() - i)
+      dates.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`)
+    }
   }
   const mapIn = new Map(inRows.map((r: any) => [r.d, r.c]))
   const mapOut = new Map(outRows.map((r: any) => [r.d, r.c]))
@@ -1143,31 +1189,75 @@ router.get('/metrics/trends', async (req: Request, res: Response) => {
 
 // Trends CSV export
 router.get('/metrics/trends.csv', async (req: Request, res: Response) => {
-  const days = Math.max(1, Math.min(90, Number(req.query.days || 14)))
+  const days = Math.max(1, Math.min(90, Number((req.query.days as any) || 14)))
   const dateFrom = (req.query.dateFrom as string | undefined)
   const dateTo = (req.query.dateTo as string | undefined)
   const materialCode = (req.query.materialCode as string | undefined)
-  const fromExpr = dateFrom ? `'${dateFrom}'` : `CURRENT_DATE - INTERVAL '${days - 1} days'`
-  const toFilter = dateTo ? ` AND "createdAt" <= '${dateTo}'` : ''
-  const materialFilterIn = materialCode ? ` AND EXISTS (SELECT 1 FROM inbound_items it JOIN materials m ON m.id=it.material_id WHERE it.order_id = inbound_orders.id AND m.code = '${materialCode}')` : ''
-  const materialFilterOut = materialCode ? ` AND EXISTS (SELECT 1 FROM outbound_items it JOIN materials m ON m.id=it.material_id WHERE it.order_id = outbound_orders.id AND m.code = '${materialCode}')` : ''
-  const inRows = await AppDataSource.query(`
-    SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
-    FROM inbound_orders WHERE "createdAt" >= ${fromExpr}${toFilter}${materialFilterIn}
-    GROUP BY 1 ORDER BY 1
-  `)
-  const outRows = await AppDataSource.query(`
-    SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
-    FROM outbound_orders WHERE "createdAt" >= ${fromExpr}${toFilter}${materialFilterOut}
-    GROUP BY 1 ORDER BY 1
-  `)
-  const today = new Date()
-  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+
+  let cond = ''
+  const params: any[] = []
+  if (dateFrom) { cond += (cond? ' AND ': '') + `o."createdAt" >= $${params.length+1}`; params.push(new Date(dateFrom)) }
+  if (dateTo) { cond += (cond? ' AND ': '') + `o."createdAt" <= $${params.length+1}`; params.push(new Date(dateTo)) }
+  if (!cond) {
+    cond = `o."createdAt" >= CURRENT_DATE - INTERVAL '${days - 1} days'`
+  }
+
+  let inRows: any[] = []
+  let outRows: any[] = []
+  if (materialCode) {
+    inRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(DISTINCT o.id)::int AS c
+       FROM inbound_orders o
+       JOIN inbound_items it ON it.order_id = o.id
+       JOIN materials m ON m.id = it.material_id
+       WHERE ${cond} AND m.code = $${params.length+1}
+       GROUP BY 1 ORDER BY 1`,
+      [...params, materialCode]
+    )
+    outRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(DISTINCT o.id)::int AS c
+       FROM outbound_orders o
+       JOIN outbound_items it ON it.order_id = o.id
+       JOIN materials m ON m.id = it.material_id
+       WHERE ${cond} AND m.code = $${params.length+1}
+       GROUP BY 1 ORDER BY 1`,
+      [...params, materialCode]
+    )
+  } else {
+    inRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
+       FROM inbound_orders o
+       WHERE ${cond}
+       GROUP BY 1 ORDER BY 1`,
+      params
+    )
+    outRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
+       FROM outbound_orders o
+       WHERE ${cond}
+       GROUP BY 1 ORDER BY 1`,
+      params
+    )
+  }
+
+  // build date list
   const dates: string[] = []
-  for (let i = days - 1; i >= 0; i--) {
-    const dt = new Date(today)
-    dt.setDate(today.getDate() - i)
-    dates.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`)
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+  if (dateFrom || dateTo) {
+    const start = dateFrom ? new Date(dateFrom) : new Date()
+    const end = dateTo ? new Date(dateTo) : new Date()
+    const d0 = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const d1 = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+    for (let d = d0; d <= d1; d = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)) {
+      dates.push(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`)
+    }
+  } else {
+    const today = new Date()
+    for (let i = days - 1; i >= 0; i--) {
+      const dt = new Date(today)
+      dt.setDate(today.getDate() - i)
+      dates.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`)
+    }
   }
   const mapIn = new Map(inRows.map((r: any) => [r.d, r.c]))
   const mapOut = new Map(outRows.map((r: any) => [r.d, r.c]))
@@ -1182,47 +1272,63 @@ router.get('/metrics/trends.csv', async (req: Request, res: Response) => {
 // Bar chart: lowest total stocks by material (top N)
 router.get('/metrics/low-stocks', async (req: Request, res: Response) => {
   const limit = Math.max(1, Math.min(20, Number(req.query.limit || 5)))
-  const materialLike = (req.query.materialLike as string || '').trim()
-  const warehouse = (req.query.warehouse as string || '').trim()
-  const params: any[] = []
-  let i = 1
-  let where = '1=1'
-  if (materialLike) { where += ` AND (m.code ILIKE $${i})`; params.push(`%${materialLike}%`); i++ }
-  if (warehouse) { where += ` AND (s.warehouse_id = (SELECT id FROM warehouses WHERE code = $${i} LIMIT 1))`; params.push(warehouse); i++ }
-  const sql = `
-    SELECT m.code AS materialCode, COALESCE(SUM(s.qty_on_hand),0) AS qty
-    FROM materials m LEFT JOIN stocks s ON s.material_id = m.id
-    WHERE ${where}
-    GROUP BY m.code
-    ORDER BY COALESCE(SUM(s.qty_on_hand),0) ASC
-    LIMIT $${i}
-  `
-  params.push(limit)
-  const rows = await AppDataSource.query(sql, params)
-  res.json(rows)
+  const warehouse = (req.query.warehouse as string | undefined)
+  const q = (req.query.q as string | undefined)
+  const like = `%${(q || '').trim()}%`
+  if (warehouse) {
+    const rows = await AppDataSource.query(`
+      SELECT m.code AS materialCode, COALESCE(SUM(CASE WHEN w.code = $1 THEN s.qty_on_hand ELSE 0 END),0) AS qty
+      FROM materials m
+      LEFT JOIN stocks s ON s.material_id = m.id
+      LEFT JOIN warehouses w ON w.id = s.warehouse_id
+      WHERE ($2 = '%%' OR m.code ILIKE $2 OR m.name ILIKE $2)
+      GROUP BY m.code
+      ORDER BY COALESCE(SUM(CASE WHEN w.code = $1 THEN s.qty_on_hand ELSE 0 END),0) ASC
+      LIMIT $3
+    `, [warehouse, like, limit])
+    return res.json(rows)
+  } else {
+    const rows = await AppDataSource.query(`
+      SELECT m.code AS materialCode, COALESCE(SUM(s.qty_on_hand),0) AS qty
+      FROM materials m LEFT JOIN stocks s ON s.material_id = m.id
+      WHERE ($1 = '%%' OR m.code ILIKE $1 OR m.name ILIKE $1)
+      GROUP BY m.code
+      ORDER BY COALESCE(SUM(s.qty_on_hand),0) ASC
+      LIMIT $2
+    `, [like, limit])
+    return res.json(rows)
+  }
 })
 
 router.get('/metrics/low-stocks.csv', async (req: Request, res: Response) => {
   const limit = Math.max(1, Math.min(100, Number(req.query.limit || 10)))
-  const materialLike = (req.query.materialLike as string || '').trim()
-  const warehouse = (req.query.warehouse as string || '').trim()
-  const params: any[] = []
-  let i = 1
-  let where = '1=1'
-  if (materialLike) { where += ` AND (m.code ILIKE $${i})`; params.push(`%${materialLike}%`); i++ }
-  if (warehouse) { where += ` AND (s.warehouse_id = (SELECT id FROM warehouses WHERE code = $${i} LIMIT 1))`; params.push(warehouse); i++ }
-  const sql = `
-    SELECT m.code AS materialCode, COALESCE(SUM(s.qty_on_hand),0) AS qty
-    FROM materials m LEFT JOIN stocks s ON s.material_id = m.id
-    WHERE ${where}
-    GROUP BY m.code
-    ORDER BY COALESCE(SUM(s.qty_on_hand),0) ASC
-    LIMIT $${i}
-  `
-  params.push(limit)
-  const rows = await AppDataSource.query(sql, params)
+  const warehouse = (req.query.warehouse as string | undefined)
+  const q = (req.query.q as string | undefined)
+  const like = `%${(q || '').trim()}%`
+  let rows: any[] = []
+  if (warehouse) {
+    rows = await AppDataSource.query(`
+      SELECT m.code AS materialCode, COALESCE(SUM(CASE WHEN w.code = $1 THEN s.qty_on_hand ELSE 0 END),0) AS qty
+      FROM materials m
+      LEFT JOIN stocks s ON s.material_id = m.id
+      LEFT JOIN warehouses w ON w.id = s.warehouse_id
+      WHERE ($2 = '%%' OR m.code ILIKE $2 OR m.name ILIKE $2)
+      GROUP BY m.code
+      ORDER BY COALESCE(SUM(CASE WHEN w.code = $1 THEN s.qty_on_hand ELSE 0 END),0) ASC
+      LIMIT $3
+    `, [warehouse, like, limit])
+  } else {
+    rows = await AppDataSource.query(`
+      SELECT m.code AS materialCode, COALESCE(SUM(s.qty_on_hand),0) AS qty
+      FROM materials m LEFT JOIN stocks s ON s.material_id = m.id
+      WHERE ($1 = '%%' OR m.code ILIKE $1 OR m.name ILIKE $1)
+      GROUP BY m.code
+      ORDER BY COALESCE(SUM(s.qty_on_hand),0) ASC
+      LIMIT $2
+    `, [like, limit])
+  }
   const header = ['materialCode','qty']
-  const csv = [header.join(',')].concat(rows.map((r:any)=> `${(r.materialCode||r.materialcode) ?? ''},${r.qty ?? 0}`)).join('\n')
+  const csv = [header.join(',')].concat(rows.map((r:any)=> `${r.materialcode||r.materialCode},${r.qty}`)).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', 'attachment; filename="low-stocks.csv"')
   res.send('\ufeff' + csv)
@@ -1231,56 +1337,109 @@ router.get('/metrics/low-stocks.csv', async (req: Request, res: Response) => {
 // Weekly trends (last N weeks)
 router.get('/metrics/weekly', async (req: Request, res: Response) => {
   const weeks = Math.max(1, Math.min(52, Number(req.query.weeks || 12)))
+  const dateFrom = (req.query.dateFrom as string | undefined)
+  const dateTo = (req.query.dateTo as string | undefined)
   const materialCode = (req.query.materialCode as string | undefined)
-  const from = `date_trunc('week', CURRENT_DATE) - INTERVAL '${weeks - 1} weeks'`
-  const materialFilterIn = materialCode ? ` AND EXISTS (SELECT 1 FROM inbound_items it JOIN materials m ON m.id=it.material_id WHERE it.order_id = inbound_orders.id AND m.code = '${materialCode}')` : ''
-  const materialFilterOut = materialCode ? ` AND EXISTS (SELECT 1 FROM outbound_items it JOIN materials m ON m.id=it.material_id WHERE it.order_id = outbound_orders.id AND m.code = '${materialCode}')` : ''
-  const inRows = await AppDataSource.query(`
-    SELECT to_char(date_trunc('week', "createdAt"), 'IYYY-IW') AS w, COUNT(1)::int AS c
-    FROM inbound_orders WHERE "createdAt" >= ${from}${materialFilterIn}
-    GROUP BY 1 ORDER BY 1
-  `)
-  const outRows = await AppDataSource.query(`
-    SELECT to_char(date_trunc('week', "createdAt"), 'IYYY-IW') AS w, COUNT(1)::int AS c
-    FROM outbound_orders WHERE "createdAt" >= ${from}${materialFilterOut}
-    GROUP BY 1 ORDER BY 1
-  `)
-  // produce recent week keys
-  const start = new Date()
-  const startOfWeek = (d: Date) => { const dt = new Date(d); const day = (dt.getDay()+6)%7; dt.setDate(dt.getDate()-day); dt.setHours(0,0,0,0); return dt }
-  const base = startOfWeek(start)
-  const keys: string[] = []
-  for (let i = weeks - 1; i >= 0; i--) {
-    const dt = new Date(base); dt.setDate(dt.getDate() - i * 7)
-    const y = dt.getFullYear()
-    // ISO week number is complex; reuse DB labels when possible. We'll approximate label as yyyy-mm-dd of week start
-    const mm = (dt.getMonth()+1).toString().padStart(2,'0')
-    const dd = dt.getDate().toString().padStart(2,'0')
-    keys.push(`${y}-${mm}-${dd}`)
+  let cond = ''
+  const params: any[] = []
+  if (dateFrom) { cond += (cond? ' AND ': '') + `o."createdAt" >= $${params.length+1}`; params.push(new Date(dateFrom)) }
+  if (dateTo) { cond += (cond? ' AND ': '') + `o."createdAt" <= $${params.length+1}`; params.push(new Date(dateTo)) }
+  if (!cond) {
+    cond = `o."createdAt" >= date_trunc('week', CURRENT_DATE) - INTERVAL '${weeks - 1} weeks'`
   }
-  // map DB rows by week label using IYYY-IW as key; we won't perfectly align with date labels, but return both
+  let inRows: any[] = []
+  let outRows: any[] = []
+  if (materialCode) {
+    inRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('week', o."createdAt"), 'IYYY-IW') AS w, COUNT(DISTINCT o.id)::int AS c
+       FROM inbound_orders o
+       JOIN inbound_items it ON it.order_id = o.id
+       JOIN materials m ON m.id = it.material_id
+       WHERE ${cond} AND m.code = $${params.length+1}
+       GROUP BY 1 ORDER BY 1`,
+      [...params, materialCode]
+    )
+    outRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('week', o."createdAt"), 'IYYY-IW') AS w, COUNT(DISTINCT o.id)::int AS c
+       FROM outbound_orders o
+       JOIN outbound_items it ON it.order_id = o.id
+       JOIN materials m ON m.id = it.material_id
+       WHERE ${cond} AND m.code = $${params.length+1}
+       GROUP BY 1 ORDER BY 1`,
+      [...params, materialCode]
+    )
+  } else {
+    inRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('week', o."createdAt"), 'IYYY-IW') AS w, COUNT(1)::int AS c
+       FROM inbound_orders o
+       WHERE ${cond}
+       GROUP BY 1 ORDER BY 1`,
+      params
+    )
+    outRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('week', o."createdAt"), 'IYYY-IW') AS w, COUNT(1)::int AS c
+       FROM outbound_orders o
+       WHERE ${cond}
+       GROUP BY 1 ORDER BY 1`,
+      params
+    )
+  }
   const mapIn = new Map(inRows.map((r:any)=> [r.w, r.c]))
   const mapOut = new Map(outRows.map((r:any)=> [r.w, r.c]))
-  const data = inRows.map((r:any)=> ({ week: r.w, inbounds: r.c, outbounds: mapOut.get(r.w) || 0 }))
+  const keys = Array.from(new Set([...inRows.map((r:any)=> r.w), ...outRows.map((r:any)=> r.w)])).sort()
+  const data = keys.map(k => ({ week: k, inbounds: mapIn.get(k) || 0, outbounds: mapOut.get(k) || 0 }))
   res.json({ weeks, data })
 })
 
 router.get('/metrics/weekly.csv', async (req: Request, res: Response) => {
   const weeks = Math.max(1, Math.min(52, Number(req.query.weeks || 12)))
+  const dateFrom = (req.query.dateFrom as string | undefined)
+  const dateTo = (req.query.dateTo as string | undefined)
   const materialCode = (req.query.materialCode as string | undefined)
-  const from = `date_trunc('week', CURRENT_DATE) - INTERVAL '${weeks - 1} weeks'`
-  const materialFilterIn = materialCode ? ` AND EXISTS (SELECT 1 FROM inbound_items it JOIN materials m ON m.id=it.material_id WHERE it.order_id = inbound_orders.id AND m.code = '${materialCode}')` : ''
-  const materialFilterOut = materialCode ? ` AND EXISTS (SELECT 1 FROM outbound_items it JOIN materials m ON m.id=it.material_id WHERE it.order_id = outbound_orders.id AND m.code = '${materialCode}')` : ''
-  const inRows = await AppDataSource.query(`
-    SELECT to_char(date_trunc('week', "createdAt"), 'IYYY-IW') AS w, COUNT(1)::int AS c
-    FROM inbound_orders WHERE "createdAt" >= ${from}${materialFilterIn}
-    GROUP BY 1 ORDER BY 1
-  `)
-  const outRows = await AppDataSource.query(`
-    SELECT to_char(date_trunc('week', "createdAt"), 'IYYY-IW') AS w, COUNT(1)::int AS c
-    FROM outbound_orders WHERE "createdAt" >= ${from}${materialFilterOut}
-    GROUP BY 1 ORDER BY 1
-  `)
+  let cond = ''
+  const params: any[] = []
+  if (dateFrom) { cond += (cond? ' AND ': '') + `o."createdAt" >= $${params.length+1}`; params.push(new Date(dateFrom)) }
+  if (dateTo) { cond += (cond? ' AND ': '') + `o."createdAt" <= $${params.length+1}`; params.push(new Date(dateTo)) }
+  if (!cond) {
+    cond = `o."createdAt" >= date_trunc('week', CURRENT_DATE) - INTERVAL '${weeks - 1} weeks'`
+  }
+  let inRows: any[] = []
+  let outRows: any[] = []
+  if (materialCode) {
+    inRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('week', o."createdAt"), 'IYYY-IW') AS w, COUNT(DISTINCT o.id)::int AS c
+       FROM inbound_orders o
+       JOIN inbound_items it ON it.order_id = o.id
+       JOIN materials m ON m.id = it.material_id
+       WHERE ${cond} AND m.code = $${params.length+1}
+       GROUP BY 1 ORDER BY 1`,
+      [...params, materialCode]
+    )
+    outRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('week', o."createdAt"), 'IYYY-IW') AS w, COUNT(DISTINCT o.id)::int AS c
+       FROM outbound_orders o
+       JOIN outbound_items it ON it.order_id = o.id
+       JOIN materials m ON m.id = it.material_id
+       WHERE ${cond} AND m.code = $${params.length+1}
+       GROUP BY 1 ORDER BY 1`,
+      [...params, materialCode]
+    )
+  } else {
+    inRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('week', o."createdAt"), 'IYYY-IW') AS w, COUNT(1)::int AS c
+       FROM inbound_orders o
+       WHERE ${cond}
+       GROUP BY 1 ORDER BY 1`,
+      params
+    )
+    outRows = await AppDataSource.query(
+      `SELECT to_char(date_trunc('week', o."createdAt"), 'IYYY-IW') AS w, COUNT(1)::int AS c
+       FROM outbound_orders o
+       WHERE ${cond}
+       GROUP BY 1 ORDER BY 1`,
+      params
+    )
+  }
   const header = ['week','inbounds','outbounds']
   const mapIn = new Map(inRows.map((r:any)=> [r.w, r.c]))
   const mapOut = new Map(outRows.map((r:any)=> [r.w, r.c]))

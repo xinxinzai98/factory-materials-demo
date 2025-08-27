@@ -1,5 +1,5 @@
 import React from 'react'
-import { Card, Col, Row, Typography, Space, Empty, Segmented, Button, DatePicker, Input, Select } from 'antd'
+import { Card, Col, Row, Typography, Space, Empty, Segmented, Button, DatePicker, Select, Input } from 'antd'
 import dayjs from 'dayjs'
 import { api } from '@/api/http'
 
@@ -10,23 +10,21 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = React.useState(false)
   const [mode, setMode] = React.useState<'daily'|'weekly'>('daily')
   const [dateRange, setDateRange] = React.useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null)
-  const [materialCode, setMaterialCode] = React.useState<string>('')
-  const [warehouse, setWarehouse] = React.useState<string>('')
+  const [warehouse, setWarehouse] = React.useState<string | undefined>(undefined)
   const [warehouses, setWarehouses] = React.useState<Array<{ code: string; name: string }>>([])
+  const [materialCode, setMaterialCode] = React.useState<string>('')
+  const [q, setQ] = React.useState<string>('')
 
   const load = React.useCallback(async (m: 'daily'|'weekly') => {
     setLoading(true)
     try {
       const paramsBase: any = {}
-      if (materialCode) paramsBase.materialCode = materialCode
-      if (dateRange && m==='daily') {
-        paramsBase.dateFrom = dateRange[0].format('YYYY-MM-DD')
-        paramsBase.dateTo = dateRange[1].format('YYYY-MM-DD')
-      }
-      const reqs = [
-        api.get('/metrics/dashboard'),
-        api.get('/metrics/low-stocks', { params: { limit: 10, warehouse: warehouse || undefined, materialLike: materialCode || undefined } })
-      ]
+      if (dateRange) { paramsBase.dateFrom = dateRange[0].format('YYYY-MM-DD'); paramsBase.dateTo = dateRange[1].format('YYYY-MM-DD') }
+      if (materialCode.trim()) paramsBase.materialCode = materialCode.trim()
+      const lowParams: any = { limit: 10 }
+      if (warehouse) lowParams.warehouse = warehouse
+      if (q.trim()) lowParams.q = q.trim()
+      const reqs = [api.get('/metrics/dashboard'), api.get('/metrics/low-stocks', { params: lowParams })]
       if (m === 'daily') reqs.splice(1, 0, api.get('/metrics/trends', { params: { days: 30, ...paramsBase } }))
       else reqs.splice(1, 0, api.get('/metrics/weekly', { params: { weeks: 12, ...paramsBase } }))
       const [mRes, tRes, lRes] = await Promise.all(reqs as any)
@@ -34,11 +32,16 @@ export default function AnalyticsPage() {
       setTrends((tRes.data?.data) || [])
       setLowStocks(lRes.data || [])
     } finally { setLoading(false) }
-  }, [])
+  }, [dateRange, materialCode, warehouse, q])
 
   React.useEffect(()=>{ load(mode) }, [])
   React.useEffect(()=>{ load(mode) }, [mode, load])
-  React.useEffect(()=>{ (async ()=>{ const r = await api.get('/warehouses'); setWarehouses(r.data || []) })() }, [])
+  React.useEffect(()=>{
+    // load warehouses
+    (async()=>{
+      try { const res = await api.get('/warehouses'); setWarehouses(res.data || []) } catch {}
+    })()
+  }, [])
 
   return (
     <div>
@@ -54,19 +57,15 @@ export default function AnalyticsPage() {
         <Col xs={24} md={8}><Card loading={loading} title="未读预警">{stats.unreadNotifications ?? 0}</Card></Col>
       </Row>
 
-      <Row gutter={[12,12]} style={{ marginTop: 12 }}>
+  <Row gutter={[12,12]} style={{ marginTop: 12 }}>
         <Col xs={24} md={12}>
-          <Card loading={loading} title={mode==='daily'? '趋势（30天）' : '周趋势（12周）'} extra={
+      <Card loading={loading} title={mode==='daily'? '趋势（30天）' : '周趋势（12周）'} extra={
             <Space>
               <Segmented size="small" value={mode} onChange={(v)=> setMode(v as any)} options={[{label:'按日', value:'daily'},{label:'按周', value:'weekly'}]} />
-              <DatePicker.RangePicker allowClear onChange={(v)=> setDateRange(v as any)} disabled={mode==='weekly'} size="small" />
-              <Input allowClear placeholder="物料编码" value={materialCode} onChange={(e)=> setMaterialCode(e.target.value)} size="small" style={{ width: 140 }} />
-              <Select allowClear placeholder="仓库" size="small" value={warehouse || undefined} onChange={(v)=> setWarehouse(v||'')} style={{ width: 140 }}
-                options={warehouses.map(w=> ({ label: `${w.code} ${w.name}`, value: w.code }))} />
               {mode==='daily' ? (
-                <Button size="small" onClick={()=>{ const p = new URLSearchParams({ days:'30', ...(materialCode?{materialCode}:{}) , ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }: {}) }).toString(); const a=document.createElement('a'); a.href=`/api/metrics/trends.csv?${p}`; a.download='trends.csv'; a.click(); }}>导出</Button>
+        <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ days: '30', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), ...(materialCode.trim()?{ materialCode: materialCode.trim() }: {}) }).toString(); const a=document.createElement('a'); a.href='/api/metrics/trends.csv?'+qs; a.download='trends.csv'; a.click(); }}>导出</Button>
               ) : (
-                <Button size="small" onClick={()=>{ const p = new URLSearchParams({ weeks:'12', ...(materialCode?{materialCode}:{}) }).toString(); const a=document.createElement('a'); a.href=`/api/metrics/weekly.csv?${p}`; a.download='weekly-trends.csv'; a.click(); }}>导出</Button>
+        <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ weeks: '12', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), ...(materialCode.trim()?{ materialCode: materialCode.trim() }: {}) }).toString(); const a=document.createElement('a'); a.href='/api/metrics/weekly.csv?'+qs; a.download='weekly-trends.csv'; a.click(); }}>导出</Button>
               )}
             </Space>
           }>
@@ -94,7 +93,20 @@ export default function AnalyticsPage() {
           </Card>
         </Col>
         <Col xs={24} md={12}>
-          <Card loading={loading} title="低库存 Top10" extra={<Button size="small" onClick={()=>{ const p = new URLSearchParams({ limit:'10', ...(warehouse?{warehouse}:{}) , ...(materialCode?{materialLike: materialCode}:{}) }).toString(); const a=document.createElement('a'); a.href=`/api/metrics/low-stocks.csv?${p}`; a.download='low-stocks.csv'; a.click(); }}>导出</Button>}>
+          <Card loading={loading} title="低库存 Top10" extra={
+            <Space size={8}>
+              <Select size="small" style={{ width: 140 }} allowClear placeholder="仓库"
+                options={warehouses.map(w=> ({ label: `${w.code}`, value: w.code }))}
+                value={warehouse}
+                onChange={(v)=> setWarehouse(v)}
+              />
+              <Input size="small" style={{ width: 160 }} allowClear placeholder="物料模糊匹配"
+                value={q} onChange={(e)=> setQ(e.target.value)}
+                onPressEnter={()=> load(mode)}
+              />
+              <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ limit: '10', ...(warehouse?{ warehouse }:{}), ...(q.trim()?{ q: q.trim() }: {}) }).toString(); const a=document.createElement('a'); a.href='/api/metrics/low-stocks.csv?'+qs; a.download='low-stocks.csv'; a.click(); }}>导出</Button>
+            </Space>
+          }>
             {lowStocks.length ? (
               <div style={{ height: 240, display: 'flex', alignItems: 'flex-end', gap: 8, padding: '0 8px' }}>
                 {(() => {
@@ -114,6 +126,14 @@ export default function AnalyticsPage() {
           </Card>
         </Col>
       </Row>
+      <Card size="small" style={{ marginTop: 12 }} title="筛选">
+        <Space wrap>
+          <DatePicker.RangePicker value={dateRange as any} onChange={(v)=> setDateRange(v as any)} allowEmpty={[true,true]} />
+          <Input placeholder="物料编码 精确" value={materialCode} onChange={(e)=> setMaterialCode(e.target.value)} style={{ width: 180 }} allowClear />
+          <Button type="primary" onClick={()=> load(mode)} loading={loading}>应用筛选</Button>
+          <Button onClick={()=> { setDateRange(null); setMaterialCode(''); setWarehouse(undefined); setQ(''); setTimeout(()=> load(mode), 0)}}>重置</Button>
+        </Space>
+      </Card>
       {/* 数据源切换 */}
       {mode==='weekly' ? (
         <React.Fragment>
