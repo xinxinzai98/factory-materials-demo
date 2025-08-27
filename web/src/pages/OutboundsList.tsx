@@ -3,7 +3,7 @@ import { Button, DatePicker, Form, Input, Select, Space, Table, Tag, message, Mo
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/api/http'
 import { exportCsvToExcel, exportToExcel } from '@/utils/exportExcel'
-import { listTemplates, upsertTemplate, removeTemplate } from '@/utils/exportTemplates'
+import { listTemplates, upsertTemplate, removeTemplate, renameTemplate } from '@/utils/exportTemplates'
 
 export default function OutboundsListPage() {
   const [rows, setRows] = useState<any[]>([])
@@ -197,8 +197,26 @@ export default function OutboundsListPage() {
           <>
             <div style={{ marginBottom: 8 }}>选择导出字段（列表）：</div>
             <Checkbox.Group style={{ width: '100%' }} value={selListHeaders} onChange={(v)=> setSelListHeaders(v as string[])}>
-              <Space direction="vertical">
-                {outboundListFields.map(f=> <Checkbox key={f.key} value={f.key}>{f.title}</Checkbox>)}
+              <Space direction="vertical" style={{ width: '100%' }}>
+                {outboundListFields.map(f=> (
+                  <div key={f.key} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <Checkbox value={f.key}>{f.title}</Checkbox>
+                    {selListHeaders.includes(f.key) && (
+                      <Space size={4}>
+                        <Button size="small" onClick={()=>{
+                          const idx = selListHeaders.indexOf(f.key); if (idx>0) {
+                            const arr = [...selListHeaders]; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; setSelListHeaders(arr)
+                          }
+                        }}>上移</Button>
+                        <Button size="small" onClick={()=>{
+                          const idx = selListHeaders.indexOf(f.key); if (idx>=0 && idx < selListHeaders.length-1) {
+                            const arr = [...selListHeaders]; [arr[idx+1], arr[idx]] = [arr[idx], arr[idx+1]]; setSelListHeaders(arr)
+                          }
+                        }}>下移</Button>
+                      </Space>
+                    )}
+                  </div>
+                ))}
               </Space>
             </Checkbox.Group>
             <Divider />
@@ -212,10 +230,12 @@ export default function OutboundsListPage() {
               ))}
             </Space>
             <Divider />
-            <Space>
+            <Space wrap>
               <AntInput placeholder="保存为方案名称" value={tplNameList} onChange={e=> setTplNameList(e.target.value)} style={{ width: 200 }} />
               <Button onClick={()=>{ if(!tplNameList.trim()) { message.warning('请输入方案名称'); return } upsertTemplate('outbound-list', tplNameList.trim(), selListHeaders, headerMapList); setTplListList(listTemplates('outbound-list')); message.success('已保存导出方案') }}>保存方案</Button>
-              {tplListList.length>0 && <Select placeholder="加载方案" style={{ width: 220 }} options={tplListList.map(t=> ({ label: t.name, value: t.name }))} onChange={(name)=>{ const t = listTemplates('outbound-list').find(x=> x.name===name); if(!t) return; setSelListHeaders(t.keys); setHeaderMapList(t.headerMap||{}); }} />}
+              {tplListList.length>0 && <Select placeholder="加载方案" style={{ width: 220 }} options={tplListList.map(t=> ({ label: t.name, value: t.name }))} onChange={(name)=>{ const t = listTemplates('outbound-list').find(x=> x.name===name); if(!t) return; setTplNameList(name); setSelListHeaders(t.keys); setHeaderMapList(t.headerMap||{}); }} />}
+              {tplListList.length>0 && <Button onClick={()=>{ const t = listTemplates('outbound-list').find(x=> x.name===tplNameList.trim()); if(!t) { message.warning('请先选择或输入方案名称'); return } const nn = prompt('重命名为：', t.name); if(!nn) return; renameTemplate('outbound-list', t.name, nn.trim()); setTplNameList(nn.trim()); setTplListList(listTemplates('outbound-list')); message.success('已重命名'); }}>重命名</Button>}
+              {tplListList.length>0 && <Button onClick={()=>{ const t = listTemplates('outbound-list').find(x=> x.name===tplNameList.trim()); if(!t) { message.warning('请先选择或输入方案名称'); return } const preview = (t.keys||[]).map(k=> headerMapList[k] || outboundListFields.find(f=> f.key===k)?.title || k).join(' , '); Modal.info({ title: '列头预览', content: <div style={{whiteSpace:'pre-wrap'}}>{preview}</div> }) }}>预览列头</Button>}
               {tplListList.length>0 && <Button danger onClick={()=>{ if(!tplNameList.trim()) { message.warning('请输入要删除的方案名称'); return } removeTemplate('outbound-list', tplNameList.trim()); setTplListList(listTemplates('outbound-list')); message.success('已删除'); }}>删除方案</Button>}
             </Space>
           </>
@@ -223,8 +243,26 @@ export default function OutboundsListPage() {
           <>
             <div style={{ marginBottom: 8 }}>选择导出字段（明细）：</div>
             <Checkbox.Group style={{ width: '100%' }} value={selDetailHeaders} onChange={(v)=> setSelDetailHeaders(v as string[])}>
-              <Space direction="vertical">
-                {outboundDetailFields.map(f=> <Checkbox key={f.key} value={f.key}>{f.title}</Checkbox>)}
+              <Space direction="vertical" style={{ width: '100%' }}>
+                {outboundDetailFields.map(f=> (
+                  <div key={f.key} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <Checkbox value={f.key}>{f.title}</Checkbox>
+                    {selDetailHeaders.includes(f.key) && (
+                      <Space size={4}>
+                        <Button size="small" onClick={()=>{
+                          const idx = selDetailHeaders.indexOf(f.key); if (idx>0) {
+                            const arr = [...selDetailHeaders]; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; setSelDetailHeaders(arr)
+                          }
+                        }}>上移</Button>
+                        <Button size="small" onClick={()=>{
+                          const idx = selDetailHeaders.indexOf(f.key); if (idx>=0 && idx < selDetailHeaders.length-1) {
+                            const arr = [...selDetailHeaders]; [arr[idx+1], arr[idx]] = [arr[idx], arr[idx+1]]; setSelDetailHeaders(arr)
+                          }
+                        }}>下移</Button>
+                      </Space>
+                    )}
+                  </div>
+                ))}
               </Space>
             </Checkbox.Group>
             <Divider />
@@ -238,10 +276,12 @@ export default function OutboundsListPage() {
               ))}
             </Space>
             <Divider />
-            <Space>
+            <Space wrap>
               <AntInput placeholder="保存为方案名称" value={tplName} onChange={e=> setTplName(e.target.value)} style={{ width: 200 }} />
               <Button onClick={()=>{ if(!tplName.trim()) { message.warning('请输入方案名称'); return } upsertTemplate('outbound-detail', tplName.trim(), selDetailHeaders, headerMap); setTplList(listTemplates('outbound-detail')); message.success('已保存导出方案') }}>保存方案</Button>
-              {tplList.length>0 && <Select placeholder="加载方案" style={{ width: 220 }} options={tplList.map(t=> ({ label: t.name, value: t.name }))} onChange={(name)=>{ const t = listTemplates('outbound-detail').find(x=> x.name===name); if(!t) return; setSelDetailHeaders(t.keys); setHeaderMap(t.headerMap||{}); }} />}
+              {tplList.length>0 && <Select placeholder="加载方案" style={{ width: 220 }} options={tplList.map(t=> ({ label: t.name, value: t.name }))} onChange={(name)=>{ const t = listTemplates('outbound-detail').find(x=> x.name===name); if(!t) return; setTplName(name); setSelDetailHeaders(t.keys); setHeaderMap(t.headerMap||{}); }} />}
+              {tplList.length>0 && <Button onClick={()=>{ const t = listTemplates('outbound-detail').find(x=> x.name===tplName.trim()); if(!t) { message.warning('请先选择或输入方案名称'); return } const nn = prompt('重命名为：', t.name); if(!nn) return; renameTemplate('outbound-detail', t.name, nn.trim()); setTplName(nn.trim()); setTplList(listTemplates('outbound-detail')); message.success('已重命名'); }}>重命名</Button>}
+              {tplList.length>0 && <Button onClick={()=>{ const t = listTemplates('outbound-detail').find(x=> x.name===tplName.trim()); if(!t) { message.warning('请先选择或输入方案名称'); return } const preview = (t.keys||[]).map(k=> headerMap[k] || outboundDetailFields.find(f=> f.key===k)?.title || k).join(' , '); Modal.info({ title: '列头预览', content: <div style={{whiteSpace:'pre-wrap'}}>{preview}</div> }) }}>预览列头</Button>}
               {tplList.length>0 && <Button danger onClick={()=>{ if(!tplName.trim()) { message.warning('请输入要删除的方案名称'); return } removeTemplate('outbound-detail', tplName.trim()); setTplList(listTemplates('outbound-detail')); message.success('已删除'); }}>删除方案</Button>}
             </Space>
           </>

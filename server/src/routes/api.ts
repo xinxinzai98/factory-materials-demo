@@ -236,8 +236,9 @@ router.get('/stocks.csv', async (req: Request, res: Response) => {
     expDate: r.expDate,
     qtyOnHand: r.qtyOnHand,
     qtyAllocated: r.qtyAllocated,
+    qtyAvailable: String(Number(r.qtyOnHand) - Number(r.qtyAllocated)),
   }));
-  const header = ['materialCode','warehouse','location','batchNo','expDate','qtyOnHand','qtyAllocated'];
+  const header = ['materialCode','warehouse','location','batchNo','expDate','qtyOnHand','qtyAllocated','qtyAvailable'];
   const escape = (v: any) => {
     const s = (v===null||v===undefined)?'':String(v)
     return '"' + s.replace(/"/g,'""') + '"'

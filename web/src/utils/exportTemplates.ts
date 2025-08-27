@@ -43,3 +43,21 @@ export function removeTemplate(scope: string, name: string) {
   const list = listTemplates(scope).filter(t => t.name !== name)
   localStorage.setItem(key(scope), JSON.stringify(list))
 }
+
+export function renameTemplate(scope: string, oldName: string, newName: string) {
+  if (!oldName || !newName || oldName === newName) return
+  const list = listTemplates(scope)
+  const idx = list.findIndex(t => t.name === oldName)
+  if (idx < 0) return
+  // 若新名称已存在，覆盖为更新（保留 keys/headerMap），时间刷新
+  const now = Date.now()
+  const curr = list[idx]
+  const existIdx = list.findIndex(t => t.name === newName)
+  if (existIdx >= 0) {
+    list[existIdx] = { ...list[existIdx], keys: curr.keys, headerMap: curr.headerMap, updatedAt: now }
+    list.splice(idx, 1)
+  } else {
+    list[idx] = { ...curr, name: newName, updatedAt: now }
+  }
+  localStorage.setItem(key(scope), JSON.stringify(list))
+}
