@@ -1,29 +1,44 @@
 import React from 'react'
-import { Card, Col, Row, Typography, Space, Empty } from 'antd'
+import { Card, Col, Row, Typography, Space, Empty, Segmented, Button, DatePicker, Input, Select } from 'antd'
+import dayjs from 'dayjs'
 import { api } from '@/api/http'
 
 export default function AnalyticsPage() {
   const [stats, setStats] = React.useState<any>({})
-  const [trends, setTrends] = React.useState<Array<{date: string; inbounds: number; outbounds: number}>>([])
+  const [trends, setTrends] = React.useState<Array<any>>([])
   const [lowStocks, setLowStocks] = React.useState<Array<{ materialCode: string; qty: number }>>([])
   const [loading, setLoading] = React.useState(false)
+  const [mode, setMode] = React.useState<'daily'|'weekly'>('daily')
+  const [dateRange, setDateRange] = React.useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null)
+  const [materialCode, setMaterialCode] = React.useState<string>('')
+  const [warehouse, setWarehouse] = React.useState<string>('')
+  const [warehouses, setWarehouses] = React.useState<Array<{ code: string; name: string }>>([])
 
-  React.useEffect(()=>{
-    const load = async () => {
-      setLoading(true)
-      try {
-        const [mRes, tRes, lRes] = await Promise.all([
-          api.get('/metrics/dashboard'),
-          api.get('/metrics/trends', { params: { days: 30 } }),
-          api.get('/metrics/low-stocks', { params: { limit: 10 } })
-        ])
-        setStats(mRes.data || {})
-        setTrends(tRes.data?.data || [])
-        setLowStocks(lRes.data || [])
-      } finally { setLoading(false) }
-    }
-    load()
+  const load = React.useCallback(async (m: 'daily'|'weekly') => {
+    setLoading(true)
+    try {
+      const paramsBase: any = {}
+      if (materialCode) paramsBase.materialCode = materialCode
+      if (dateRange && m==='daily') {
+        paramsBase.dateFrom = dateRange[0].format('YYYY-MM-DD')
+        paramsBase.dateTo = dateRange[1].format('YYYY-MM-DD')
+      }
+      const reqs = [
+        api.get('/metrics/dashboard'),
+        api.get('/metrics/low-stocks', { params: { limit: 10, warehouse: warehouse || undefined, materialLike: materialCode || undefined } })
+      ]
+      if (m === 'daily') reqs.splice(1, 0, api.get('/metrics/trends', { params: { days: 30, ...paramsBase } }))
+      else reqs.splice(1, 0, api.get('/metrics/weekly', { params: { weeks: 12, ...paramsBase } }))
+      const [mRes, tRes, lRes] = await Promise.all(reqs as any)
+      setStats(mRes.data || {})
+      setTrends((tRes.data?.data) || [])
+      setLowStocks(lRes.data || [])
+    } finally { setLoading(false) }
   }, [])
+
+  React.useEffect(()=>{ load(mode) }, [])
+  React.useEffect(()=>{ load(mode) }, [mode, load])
+  React.useEffect(()=>{ (async ()=>{ const r = await api.get('/warehouses'); setWarehouses(r.data || []) })() }, [])
 
   return (
     <div>
@@ -33,10 +48,28 @@ export default function AnalyticsPage() {
         <Col xs={24} md={8}><Card loading={loading} title="库存总量">{stats.stocksQtyOnHand ?? 0}</Card></Col>
         <Col xs={24} md={8}><Card loading={loading} title={`临期批次（${stats.expiryDays ?? 30}天内）`}>{stats.soonToExpireBatches ?? 0}</Card></Col>
       </Row>
+      <Row gutter={[12,12]} style={{ marginTop: 12 }}>
+        <Col xs={24} md={8}><Card loading={loading} title={`低库存物料（阈值 ${stats.globalMinQty ?? 0}）`}>{stats.lowStockMaterials ?? 0}</Card></Col>
+        <Col xs={24} md={8}><Card loading={loading} title={`滞销物料（${stats.slowDays ?? 60}天）`}>{stats.slowMaterials ?? 0}</Card></Col>
+        <Col xs={24} md={8}><Card loading={loading} title="未读预警">{stats.unreadNotifications ?? 0}</Card></Col>
+      </Row>
 
       <Row gutter={[12,12]} style={{ marginTop: 12 }}>
         <Col xs={24} md={12}>
-          <Card loading={loading} title="趋势（30天）">
+          <Card loading={loading} title={mode==='daily'? '趋势（30天）' : '周趋势（12周）'} extra={
+            <Space>
+              <Segmented size="small" value={mode} onChange={(v)=> setMode(v as any)} options={[{label:'按日', value:'daily'},{label:'按周', value:'weekly'}]} />
+              <DatePicker.RangePicker allowClear onChange={(v)=> setDateRange(v as any)} disabled={mode==='weekly'} size="small" />
+              <Input allowClear placeholder="物料编码" value={materialCode} onChange={(e)=> setMaterialCode(e.target.value)} size="small" style={{ width: 140 }} />
+              <Select allowClear placeholder="仓库" size="small" value={warehouse || undefined} onChange={(v)=> setWarehouse(v||'')} style={{ width: 140 }}
+                options={warehouses.map(w=> ({ label: `${w.code} ${w.name}`, value: w.code }))} />
+              {mode==='daily' ? (
+                <Button size="small" onClick={()=>{ const p = new URLSearchParams({ days:'30', ...(materialCode?{materialCode}:{}) , ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }: {}) }).toString(); const a=document.createElement('a'); a.href=`/api/metrics/trends.csv?${p}`; a.download='trends.csv'; a.click(); }}>导出</Button>
+              ) : (
+                <Button size="small" onClick={()=>{ const p = new URLSearchParams({ weeks:'12', ...(materialCode?{materialCode}:{}) }).toString(); const a=document.createElement('a'); a.href=`/api/metrics/weekly.csv?${p}`; a.download='weekly-trends.csv'; a.click(); }}>导出</Button>
+              )}
+            </Space>
+          }>
             {trends.length ? (
               <div style={{ height: 240, position: 'relative' }}>
                 <svg width="100%" height="220" viewBox="0 0 600 220" preserveAspectRatio="none">
@@ -54,14 +87,14 @@ export default function AnalyticsPage() {
                   })}
                 </svg>
                 <div style={{ position: 'absolute', bottom: 0, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', opacity: .6, fontSize: 12 }}>
-                  {trends.map((t, i) => (<span key={i}>{(t.date || '').slice(5)}</span>))}
+                  {trends.map((t: any, i) => (<span key={i}>{(t.date || t.week || '').slice(5)}</span>))}
                 </div>
               </div>
             ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />}
           </Card>
         </Col>
         <Col xs={24} md={12}>
-          <Card loading={loading} title="低库存 Top10">
+          <Card loading={loading} title="低库存 Top10" extra={<Button size="small" onClick={()=>{ const p = new URLSearchParams({ limit:'10', ...(warehouse?{warehouse}:{}) , ...(materialCode?{materialLike: materialCode}:{}) }).toString(); const a=document.createElement('a'); a.href=`/api/metrics/low-stocks.csv?${p}`; a.download='low-stocks.csv'; a.click(); }}>导出</Button>}>
             {lowStocks.length ? (
               <div style={{ height: 240, display: 'flex', alignItems: 'flex-end', gap: 8, padding: '0 8px' }}>
                 {(() => {
@@ -81,6 +114,12 @@ export default function AnalyticsPage() {
           </Card>
         </Col>
       </Row>
+      {/* 数据源切换 */}
+      {mode==='weekly' ? (
+        <React.Fragment>
+          {/** 每次切换时加载 weekly 数据 */}
+        </React.Fragment>
+      ) : null}
     </div>
   )
 }
