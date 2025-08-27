@@ -14,6 +14,10 @@ export default function AnalyticsPage() {
   const [warehouses, setWarehouses] = React.useState<Array<{ code: string; name: string }>>([])
   const [materialCode, setMaterialCode] = React.useState<string>('')
   const [q, setQ] = React.useState<string>('')
+  // 新增：入/出库导出筛选
+  const [inStatus, setInStatus] = React.useState<string | undefined>(undefined)
+  const [outStatus, setOutStatus] = React.useState<string | undefined>(undefined)
+  const [orderCode, setOrderCode] = React.useState<string>('')
 
   const load = React.useCallback(async (m: 'daily'|'weekly') => {
     setLoading(true)
@@ -131,9 +135,73 @@ export default function AnalyticsPage() {
           <DatePicker.RangePicker value={dateRange as any} onChange={(v)=> setDateRange(v as any)} allowEmpty={[true,true]} />
           <Input placeholder="物料编码 精确" value={materialCode} onChange={(e)=> setMaterialCode(e.target.value)} style={{ width: 180 }} allowClear />
           <Button type="primary" onClick={()=> load(mode)} loading={loading}>应用筛选</Button>
-          <Button onClick={()=> { setDateRange(null); setMaterialCode(''); setWarehouse(undefined); setQ(''); setTimeout(()=> load(mode), 0)}}>重置</Button>
+          <Button onClick={()=> { setDateRange(null); setMaterialCode(''); setWarehouse(undefined); setQ(''); setInStatus(undefined); setOutStatus(undefined); setOrderCode(''); setTimeout(()=> load(mode), 0)}}>重置</Button>
         </Space>
       </Card>
+
+      <Card size="small" style={{ marginTop: 12 }} title="快捷导出（入/出库）" extra={<span style={{ opacity:.65, fontSize:12 }}>按日期/状态/单号导出 CSV</span>}>
+        <Space wrap size={8}>
+          <DatePicker.RangePicker value={dateRange as any} onChange={(v)=> setDateRange(v as any)} allowEmpty={[true,true]} />
+          <Select
+            allowClear size="small" style={{ width: 160 }} placeholder="入库状态"
+            options={[
+              { label: 'DRAFT', value: 'DRAFT' },
+              { label: 'APPROVED', value: 'APPROVED' },
+              { label: 'PUTAWAY', value: 'PUTAWAY' },
+              { label: 'CANCELLED', value: 'CANCELLED' },
+            ]}
+            value={inStatus}
+            onChange={(v)=> setInStatus(v)}
+          />
+          <Select
+            allowClear size="small" style={{ width: 160 }} placeholder="出库状态"
+            options={[
+              { label: 'DRAFT', value: 'DRAFT' },
+              { label: 'APPROVED', value: 'APPROVED' },
+              { label: 'PICKED', value: 'PICKED' },
+              { label: 'CANCELLED', value: 'CANCELLED' },
+            ]}
+            value={outStatus}
+            onChange={(v)=> setOutStatus(v)}
+          />
+          <Input size="small" style={{ width: 180 }} placeholder="单号包含..." allowClear value={orderCode} onChange={(e)=> setOrderCode(e.target.value)} />
+          <Space size={8}>
+            <Button size="small" onClick={()=>{
+              const qs = new URLSearchParams({
+                ...(inStatus? { status: inStatus } : {}),
+                ...(orderCode.trim()? { code: orderCode.trim() } : {}),
+                ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') } : {}),
+              }).toString();
+              const a=document.createElement('a'); a.href='/api/inbounds.csv?'+qs; a.download='inbounds.csv'; a.click();
+            }}>入库单</Button>
+            <Button size="small" onClick={()=>{
+              const qs = new URLSearchParams({
+                ...(inStatus? { status: inStatus } : {}),
+                ...(orderCode.trim()? { code: orderCode.trim() } : {}),
+                ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') } : {}),
+              }).toString();
+              const a=document.createElement('a'); a.href='/api/inbound-items.csv?'+qs; a.download='inbound-items.csv'; a.click();
+            }}>入库明细</Button>
+            <Button size="small" onClick={()=>{
+              const qs = new URLSearchParams({
+                ...(outStatus? { status: outStatus } : {}),
+                ...(orderCode.trim()? { code: orderCode.trim() } : {}),
+                ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') } : {}),
+              }).toString();
+              const a=document.createElement('a'); a.href='/api/outbounds.csv?'+qs; a.download='outbounds.csv'; a.click();
+            }}>出库单</Button>
+            <Button size="small" onClick={()=>{
+              const qs = new URLSearchParams({
+                ...(outStatus? { status: outStatus } : {}),
+                ...(orderCode.trim()? { code: orderCode.trim() } : {}),
+                ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') } : {}),
+              }).toString();
+              const a=document.createElement('a'); a.href='/api/outbound-items.csv?'+qs; a.download='outbound-items.csv'; a.click();
+            }}>出库明细</Button>
+          </Space>
+        </Space>
+      </Card>
+
       {/* 数据源切换 */}
       {mode==='weekly' ? (
         <React.Fragment>
