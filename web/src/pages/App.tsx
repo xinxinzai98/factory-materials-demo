@@ -1,7 +1,7 @@
 import React from 'react'
-import { Layout, Menu, theme, Typography, Button, Input, Modal, Avatar, Tag, Popover, Divider, Badge, List, Space } from 'antd'
+import { Layout, Menu, theme, Typography, Button, Input, Modal, Avatar, Tag, Popover, Divider, Badge, List, Space, Segmented } from 'antd'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { DatabaseOutlined, InboxOutlined, SendOutlined, SettingOutlined, SwapOutlined, ToolOutlined, DashboardOutlined, ExperimentOutlined, BellOutlined, SearchOutlined, MoonOutlined, SunOutlined, UserOutlined, RightOutlined, QuestionCircleOutlined, PlusSquareOutlined, CrownFilled, EyeOutlined, BarChartOutlined } from '@ant-design/icons'
+import { DatabaseOutlined, InboxOutlined, SendOutlined, SettingOutlined, SwapOutlined, ToolOutlined, DashboardOutlined, ExperimentOutlined, BellOutlined, SearchOutlined, MoonOutlined, SunOutlined, RightOutlined, QuestionCircleOutlined, CrownFilled, EyeOutlined, BarChartOutlined } from '@ant-design/icons'
 import Splash from './Splash'
 const MaterialsPage = React.lazy(()=> import('@/pages/Materials'))
 const StocksPage = React.lazy(()=> import('@/pages/Stocks'))
@@ -50,13 +50,16 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
   const [userOpen, setUserOpen] = React.useState(false)
   const [notifOpen, setNotifOpen] = React.useState(false)
   const [notifications, setNotifications] = React.useState<any[]>([])
+  const [notifStatus, setNotifStatus] = React.useState<'ALL'|'UNREAD'>('ALL')
   const loadNotifications = React.useCallback(async ()=>{
     try {
-      const { data } = await api.get('/notifications')
+      const params: any = {}
+      if (notifStatus === 'UNREAD') params.status = 'UNREAD'
+      const { data } = await api.get('/notifications', { params })
       setNotifications((data||[]).map((n:any)=>({ id:n.id, title:n.title, desc:n.message, type:n.type, status:n.status })))
     } catch {}
-  }, [])
-  React.useEffect(()=>{ if (authed) loadNotifications() }, [authed])
+  }, [notifStatus])
+  React.useEffect(()=>{ if (authed) loadNotifications() }, [authed, loadNotifications])
   React.useEffect(()=>{
     if (!authed) return
     const t = setInterval(()=> loadNotifications(), 15000)
@@ -151,11 +154,13 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <Input allowClear prefix={<SearchOutlined />} placeholder="全局搜索（物料/单号/批次）" style={{ width: 360 }} onPressEnter={(e)=>{ const kw=(e.target as HTMLInputElement).value.trim(); if(kw) navigate(`/search?q=${encodeURIComponent(kw)}`) }} />
             <Popover content={
-              <div style={{ width: 320 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+              <div style={{ width: 360 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8, alignItems: 'center' }}>
                   <div style={{ fontWeight: 600 }}>通知</div>
                   <Space>
+                    <Segmented size="small" value={notifStatus} onChange={(v)=> setNotifStatus(v as any)} options={[{ label:'全部', value:'ALL' }, { label:'仅未读', value:'UNREAD' }]} />
                     <Button size="small" onClick={loadNotifications}>刷新</Button>
+                    <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ ...(notifStatus==='UNREAD'?{ status:'UNREAD' }:{} ) }).toString(); const a=document.createElement('a'); a.href='/api/notifications.csv'+(qs?'?'+qs:''); a.download='notifications.csv'; a.click(); }}>导出</Button>
                     <Button size="small" onClick={async()=>{ await api.post('/notifications/mark-all-read'); loadNotifications() }}>全部已读</Button>
                   </Space>
                 </div>
@@ -166,7 +171,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
                   </List.Item>
                 )} />
               </div>
-            } trigger="click" open={notifOpen} onOpenChange={setNotifOpen}>
+            } trigger="click" open={notifOpen} onOpenChange={(open)=> { setNotifOpen(open); if (open) loadNotifications() }}>
               <Badge count={notifications.filter(n=>n.status==='UNREAD').length} size="small">
                 <Button type="text" icon={<BellOutlined />} />
               </Badge>
