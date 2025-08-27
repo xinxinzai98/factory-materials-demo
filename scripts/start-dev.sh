@@ -96,9 +96,10 @@ ensure_db() {
   exit 1
 }
 
-# 安装依赖（若未安装）
-if [ ! -d node_modules ]; then
-  npm ci || npm i
+# 安装依赖（若未安装或缺少必要可执行文件）
+if [ ! -d node_modules ] || [ ! -x node_modules/.bin/tsc ] || [ ! -x node_modules/.bin/tsx ]; then
+  echo "Installing server deps..."
+  (npm ci || npm i)
 fi
 
 # 确保数据库可用
@@ -120,8 +121,9 @@ wait_for_port localhost 8080 120
 
 # 3) 启动前端（后台）
 pushd "$WEB_DIR" >/dev/null
-if [ ! -d node_modules ]; then
-  npm ci || npm i
+if [ ! -d node_modules ] || [ ! -x node_modules/.bin/vite ]; then
+  echo "Installing web deps..."
+  (npm ci || npm i)
 fi
 
 # 设置前端 BASE 为 /api 代理默认（vite.config 已代理到 8080）
