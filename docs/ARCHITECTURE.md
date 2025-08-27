@@ -41,6 +41,15 @@
   - `lowStockMaterials`：按物料聚合总在库量，`sum(qty_on_hand) < globalMinQty` 的物料数量
   - `slowMaterials`：当前有存量但 `slowDays` 内没有任何出库记录的物料数量
 
+### 口径对齐补充
+- 低库存统计严格以 `app_settings.thresholds.globalMinQty` 为准，按物料维度汇总总在库量后比较。
+- 临期批次口径：仅统计有库存的批次（qty_on_hand > 0），并以 `expiryDays` 天内到期作为临期阈值。
+- 滞销物料口径：有存量但在 `slowDays` 内无任何出库订单涉及该物料（按订单去重）。
+- 趋势统计：
+  - 不筛物料时，统计每天/每周的订单数量（入库单/出库单）。
+  - 指定 `materialCode` 时，统计包含该物料的订单数量（对订单去重）。
+- 趋势对比（多物料）：并行获取每个物料的按日趋势并按日期对齐，支持 CSV 导出；当前数据模型中订单不绑定仓库，故不提供“按仓库的趋势对比”，仓库维度建议通过库存变动报表实现（后续可选）。
+
 ## 鉴权与 RBAC
 - 访问保护：所有 /api 路由默认使用 `authGuard`，支持 X-API-Key 或 JWT
 - 角色权限：

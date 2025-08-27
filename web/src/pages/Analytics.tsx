@@ -13,11 +13,13 @@ export default function AnalyticsPage() {
   const [warehouse, setWarehouse] = React.useState<string | undefined>(undefined)
   const [warehouses, setWarehouses] = React.useState<Array<{ code: string; name: string }>>([])
   const [materialCode, setMaterialCode] = React.useState<string>('')
+  const [compareCodes, setCompareCodes] = React.useState<string>('')
   const [q, setQ] = React.useState<string>('')
   // 新增：入/出库导出筛选
   const [inStatus, setInStatus] = React.useState<string | undefined>(undefined)
   const [outStatus, setOutStatus] = React.useState<string | undefined>(undefined)
   const [orderCode, setOrderCode] = React.useState<string>('')
+  const [compareSeries, setCompareSeries] = React.useState<any | null>(null)
 
   const load = React.useCallback(async (m: 'daily'|'weekly') => {
     setLoading(true)
@@ -31,10 +33,14 @@ export default function AnalyticsPage() {
       const reqs = [api.get('/metrics/dashboard'), api.get('/metrics/low-stocks', { params: lowParams })]
       if (m === 'daily') reqs.splice(1, 0, api.get('/metrics/trends', { params: { days: 30, ...paramsBase } }))
       else reqs.splice(1, 0, api.get('/metrics/weekly', { params: { weeks: 12, ...paramsBase } }))
-      const [mRes, tRes, lRes] = await Promise.all(reqs as any)
+  // 若填写了对比物料，则并发加载 compare 数据
+  const compareParam = compareCodes.split(',').map(s=> s.trim()).filter(Boolean).slice(0,5).join(',')
+  const extraReq = compareParam ? api.get('/metrics/trends/compare', { params: { days: m==='daily'?30:12, ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), materials: compareParam } }) : Promise.resolve({ data: null })
+  const [mRes, tRes, lRes, cRes] = await Promise.all([...reqs as any, extraReq])
       setStats(mRes.data || {})
       setTrends((tRes.data?.data) || [])
       setLowStocks(lRes.data || [])
+  setCompareSeries(cRes?.data || null)
     } finally { setLoading(false) }
   }, [dateRange, materialCode, warehouse, q])
 
@@ -134,10 +140,25 @@ export default function AnalyticsPage() {
         <Space wrap>
           <DatePicker.RangePicker value={dateRange as any} onChange={(v)=> setDateRange(v as any)} allowEmpty={[true,true]} />
           <Input placeholder="物料编码 精确" value={materialCode} onChange={(e)=> setMaterialCode(e.target.value)} style={{ width: 180 }} allowClear />
+          <Input placeholder="趋势对比 物料编码，逗号分隔，最多5个" value={compareCodes} onChange={(e)=> setCompareCodes(e.target.value)} style={{ width: 320 }} allowClear />
           <Button type="primary" onClick={()=> load(mode)} loading={loading}>应用筛选</Button>
-          <Button onClick={()=> { setDateRange(null); setMaterialCode(''); setWarehouse(undefined); setQ(''); setInStatus(undefined); setOutStatus(undefined); setOrderCode(''); setTimeout(()=> load(mode), 0)}}>重置</Button>
+          <Button onClick={()=> { setDateRange(null); setMaterialCode(''); setCompareCodes(''); setWarehouse(undefined); setQ(''); setInStatus(undefined); setOutStatus(undefined); setOrderCode(''); setTimeout(()=> load(mode), 0)}}>重置</Button>
         </Space>
       </Card>
+
+      {/* 趋势对比（多物料，按日） */}
+      {compareCodes.trim() ? (
+        <Card size="small" style={{ marginTop: 12 }} title="趋势对比（多物料，按日）" extra={<Space>
+          <Button size="small" onClick={()=>{
+            const materials = compareCodes.split(',').map(s=> s.trim()).filter(Boolean).slice(0,5).join(',')
+            if (!materials) return
+            const qs = new URLSearchParams({ days: '30', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), materials }).toString()
+            const a=document.createElement('a'); a.href='/api/metrics/trends/compare.csv?'+qs; a.download='trends-compare.csv'; a.click();
+          }}>导出</Button>
+        </Space>}>
+          <CompareTrends materialsInput={compareCodes} dateRange={dateRange} />
+        </Card>
+      ) : null}
 
       <Card size="small" style={{ marginTop: 12 }} title="快捷导出（入/出库）" extra={<span style={{ opacity:.65, fontSize:12 }}>按日期/状态/单号导出 CSV</span>}>
         <Space wrap size={8}>
@@ -208,6 +229,64 @@ export default function AnalyticsPage() {
           {/** 每次切换时加载 weekly 数据 */}
         </React.Fragment>
       ) : null}
+    </div>
+  )
+}
+
+type CompareProps = { materialsInput: string; dateRange: [dayjs.Dayjs, dayjs.Dayjs] | null }
+function CompareTrends({ materialsInput, dateRange }: CompareProps) {
+  const [loading, setLoading] = React.useState(false)
+  const [data, setData] = React.useState<{ dates: string[]; series: Array<{ materialCode: string; data: Array<{ date: string; inbounds: number; outbounds: number }> }> } | null>(null)
+  const load = React.useCallback(async ()=>{
+    const materials = materialsInput.split(',').map(s=> s.trim()).filter(Boolean).slice(0,5).join(',')
+    if (!materials) { setData(null); return }
+    setLoading(true)
+    try {
+      const params: any = { days: 30, materials }
+      if (dateRange) { params.dateFrom = dateRange[0].format('YYYY-MM-DD'); params.dateTo = dateRange[1].format('YYYY-MM-DD') }
+      const { data } = await api.get('/metrics/trends/compare', { params })
+      setData(data || null)
+    } finally { setLoading(false) }
+  }, [materialsInput, dateRange])
+  React.useEffect(()=>{ load() }, [load])
+  if (!materialsInput.trim()) return null
+  return (
+    <div style={{ height: 260, position: 'relative' }}>
+      {data && data.dates && data.series?.length ? (
+        <svg width="100%" height="220" viewBox="0 0 600 220" preserveAspectRatio="none">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <line key={i} x1={0} x2={600} y1={10 + i * 35} y2={10 + i * 35} stroke={'rgba(0,0,0,0.08)'} strokeWidth={1} />
+          ))}
+          {(() => {
+            const colors = ['#ef4444','#10b981','#f59e0b','#8b5cf6','#0ea5e9']
+            const max = Math.max(1, ...data.series.flatMap(s=> s.data.map(d=> Math.max(d.inbounds||0, d.outbounds||0))))
+            const W = 600, H = 190, L = 20, T = 10
+            const step = (W - L * 2) / Math.max(1, data.dates.length - 1)
+            return data.series.map((s, si) => {
+              const y = (v: number) => T + H - (v / max) * H
+              let dIn = '', dOut = ''
+              const mapIn = new Map(s.data.map(r=> [r.date, r.inbounds]))
+              const mapOut = new Map(s.data.map(r=> [r.date, r.outbounds]))
+              data.dates.forEach((date, i) => {
+                const x = L + i * step
+                const yi = y(Number(mapIn.get(date) || 0))
+                const yo = y(Number(mapOut.get(date) || 0))
+                dIn += (i === 0 ? `M ${x},${yi}` : ` L ${x},${yi}`)
+                dOut += (i === 0 ? `M ${x},${yo}` : ` L ${x},${yo}`)
+              })
+              return (
+                <g key={s.materialCode}>
+                  <path d={dIn} fill="none" stroke={colors[si%colors.length]} strokeWidth={2} />
+                  <path d={dOut} fill="none" stroke={colors[(si+3)%colors.length]} strokeWidth={2} opacity={0.7} />
+                </g>
+              )
+            })
+          })()}
+        </svg>
+      ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={loading? '加载中…' : '暂无数据'} />} 
+      <div style={{ position: 'absolute', bottom: 0, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', opacity: .6, fontSize: 12 }}>
+        {(data?.dates||[]).map((d, i)=> (<span key={i}>{String(d).slice(5)}</span>))}
+      </div>
     </div>
   )
 }

@@ -15,6 +15,7 @@ import { Adjustment } from '../entities/Adjustment.js';
 import { User } from '../entities/User.js';
 import { Supplier } from '../entities/Supplier.js';
 import { Notification } from '../entities/Notification.js';
+import { getDashboardMetrics, getTrends as svcGetTrends, getLowStocks as svcGetLowStocks } from '../services/metrics.js';
 import bcrypt from 'bcrypt';
 // no external csv lib; build simple CSV manually
 
@@ -1034,77 +1035,8 @@ router.get('/orders/:code', async (req: Request, res: Response) => {
 
 // ---------- Metrics (Dashboard) ----------
 router.get('/metrics/dashboard', async (_req: Request, res: Response) => {
-  // thresholds
-  const row = await AppDataSource.query('SELECT v FROM app_settings WHERE k=$1', ['thresholds'])
-  const { globalMinQty, expiryDays, slowDays } = row?.[0]?.v || { globalMinQty: 0, expiryDays: 30, slowDays: 60 }
-
-  // materials count
-  const materialsCountRow = await AppDataSource.query('SELECT COUNT(1)::int AS cnt FROM materials')
-  const materialsCount = materialsCountRow?.[0]?.cnt || 0
-
-  // stocks total qty_on_hand
-  const stocksSumRow = await AppDataSource.query('SELECT COALESCE(SUM(qty_on_hand),0) AS sum FROM stocks')
-  const stocksQtyOnHand = Number(stocksSumRow?.[0]?.sum || 0)
-
-  // soon to expire batches count
-  const soonRows = await AppDataSource.query(`
-    SELECT COUNT(1)::int AS cnt
-    FROM stocks s
-    WHERE s.exp_date IS NOT NULL AND s.qty_on_hand > 0 AND s.exp_date <= (CURRENT_DATE + INTERVAL '${expiryDays} days')
-  `)
-  const soonToExpireBatches = soonRows?.[0]?.cnt || 0
-
-  // orders today
-  const inbToday = await AppDataSource.query(`SELECT COUNT(1)::int AS cnt FROM inbound_orders WHERE "createdAt" >= CURRENT_DATE`)
-  const outbToday = await AppDataSource.query(`SELECT COUNT(1)::int AS cnt FROM outbound_orders WHERE "createdAt" >= CURRENT_DATE`)
-  const inboundsToday = inbToday?.[0]?.cnt || 0
-  const outboundsToday = outbToday?.[0]?.cnt || 0
-
-  // unread notifications
-  const unreadRow = await AppDataSource.query(`SELECT COUNT(1)::int AS cnt FROM notifications WHERE status='UNREAD'`)
-  const unreadNotifications = unreadRow?.[0]?.cnt || 0
-
-  // low stock materials (sum(qty_on_hand) < globalMinQty)
-  const lowRows = await AppDataSource.query(
-    `SELECT COUNT(1)::int AS cnt FROM (
-      SELECT m.id, COALESCE(SUM(s.qty_on_hand),0) AS qty
-      FROM materials m LEFT JOIN stocks s ON s.material_id = m.id
-      GROUP BY m.id
-    ) t WHERE t.qty < $1`, [Number(globalMinQty||0)]
-  )
-  const lowStockMaterials = lowRows?.[0]?.cnt || 0
-
-  // slow materials: have stock > 0 but no outbound in last slowDays
-  const sd = Number(slowDays||60)
-  const slowCntRows = await AppDataSource.query(`
-    SELECT COUNT(*)::int AS cnt FROM (
-      SELECT DISTINCT m.id
-      FROM materials m
-      JOIN stocks s ON s.material_id = m.id
-      WHERE s.qty_on_hand > 0
-    ) has_stock
-    WHERE has_stock.id NOT IN (
-      SELECT DISTINCT oi.material_id
-      FROM outbound_items oi
-      JOIN outbound_orders oo ON oo.id = oi.order_id
-      WHERE oo."createdAt" >= NOW() - INTERVAL '${sd} days'
-    )
-  `)
-  const slowMaterials = slowCntRows?.[0]?.cnt || 0
-
-  res.json({
-    materialsCount,
-    stocksQtyOnHand,
-    soonToExpireBatches,
-    inboundsToday,
-    outboundsToday,
-    unreadNotifications,
-  expiryDays,
-  globalMinQty: Number(globalMinQty||0),
-  slowDays: sd,
-  lowStockMaterials,
-  slowMaterials
-  })
+  const data = await getDashboardMetrics(AppDataSource)
+  res.json(data)
 })
 
 // Line chart trends: last N days inbound/outbound order counts
@@ -1113,78 +1045,8 @@ router.get('/metrics/trends', async (req: Request, res: Response) => {
   const dateFrom = (req.query.dateFrom as string | undefined)
   const dateTo = (req.query.dateTo as string | undefined)
   const materialCode = (req.query.materialCode as string | undefined)
-
-  // 构造时间范围
-  let cond = ''
-  const params: any[] = []
-  if (dateFrom) { cond += (cond? ' AND ': '') + `o."createdAt" >= $${params.length+1}`; params.push(new Date(dateFrom)) }
-  if (dateTo) { cond += (cond? ' AND ': '') + `o."createdAt" <= $${params.length+1}`; params.push(new Date(dateTo)) }
-  if (!cond) {
-    cond = `o."createdAt" >= CURRENT_DATE - INTERVAL '${days - 1} days'`
-  }
-
-  let inRows: any[] = []
-  let outRows: any[] = []
-  if (materialCode) {
-    // 按包含该物料的订单数量（日），去重计数
-    inRows = await AppDataSource.query(
-      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(DISTINCT o.id)::int AS c
-       FROM inbound_orders o
-       JOIN inbound_items it ON it.order_id = o.id
-       JOIN materials m ON m.id = it.material_id
-       WHERE ${cond} AND m.code = $${params.length+1}
-       GROUP BY 1 ORDER BY 1`,
-      [...params, materialCode]
-    )
-    outRows = await AppDataSource.query(
-      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(DISTINCT o.id)::int AS c
-       FROM outbound_orders o
-       JOIN outbound_items it ON it.order_id = o.id
-       JOIN materials m ON m.id = it.material_id
-       WHERE ${cond} AND m.code = $${params.length+1}
-       GROUP BY 1 ORDER BY 1`,
-      [...params, materialCode]
-    )
-  } else {
-    inRows = await AppDataSource.query(
-      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
-       FROM inbound_orders o
-       WHERE ${cond}
-       GROUP BY 1 ORDER BY 1`,
-      params
-    )
-    outRows = await AppDataSource.query(
-      `SELECT to_char(date_trunc('day', o."createdAt"), 'YYYY-MM-DD') AS d, COUNT(1)::int AS c
-       FROM outbound_orders o
-       WHERE ${cond}
-       GROUP BY 1 ORDER BY 1`,
-      params
-    )
-  }
-
-  // 生成日期序列（若传入 dateFrom/dateTo，则按该范围）
-  const dates: string[] = []
-  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
-  if (dateFrom || dateTo) {
-    const start = dateFrom ? new Date(dateFrom) : new Date()
-    const end = dateTo ? new Date(dateTo) : new Date()
-    const d0 = new Date(start.getFullYear(), start.getMonth(), start.getDate())
-    const d1 = new Date(end.getFullYear(), end.getMonth(), end.getDate())
-    for (let d = d0; d <= d1; d = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)) {
-      dates.push(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`)
-    }
-  } else {
-    const today = new Date()
-    for (let i = days - 1; i >= 0; i--) {
-      const dt = new Date(today)
-      dt.setDate(today.getDate() - i)
-      dates.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`)
-    }
-  }
-  const mapIn = new Map(inRows.map((r: any) => [r.d, r.c]))
-  const mapOut = new Map(outRows.map((r: any) => [r.d, r.c]))
-  const data = dates.map(d => ({ date: d, inbounds: mapIn.get(d) || 0, outbounds: mapOut.get(d) || 0 }))
-  res.json({ days, data })
+  const data = await svcGetTrends(AppDataSource, { days, dateFrom, dateTo, materialCode })
+  res.json(data)
 })
 
 // Trends CSV export
@@ -1274,59 +1136,15 @@ router.get('/metrics/low-stocks', async (req: Request, res: Response) => {
   const limit = Math.max(1, Math.min(20, Number(req.query.limit || 5)))
   const warehouse = (req.query.warehouse as string | undefined)
   const q = (req.query.q as string | undefined)
-  const like = `%${(q || '').trim()}%`
-  if (warehouse) {
-    const rows = await AppDataSource.query(`
-      SELECT m.code AS materialCode, COALESCE(SUM(CASE WHEN w.code = $1 THEN s.qty_on_hand ELSE 0 END),0) AS qty
-      FROM materials m
-      LEFT JOIN stocks s ON s.material_id = m.id
-      LEFT JOIN warehouses w ON w.id = s.warehouse_id
-      WHERE ($2 = '%%' OR m.code ILIKE $2 OR m.name ILIKE $2)
-      GROUP BY m.code
-      ORDER BY COALESCE(SUM(CASE WHEN w.code = $1 THEN s.qty_on_hand ELSE 0 END),0) ASC
-      LIMIT $3
-    `, [warehouse, like, limit])
-    return res.json(rows)
-  } else {
-    const rows = await AppDataSource.query(`
-      SELECT m.code AS materialCode, COALESCE(SUM(s.qty_on_hand),0) AS qty
-      FROM materials m LEFT JOIN stocks s ON s.material_id = m.id
-      WHERE ($1 = '%%' OR m.code ILIKE $1 OR m.name ILIKE $1)
-      GROUP BY m.code
-      ORDER BY COALESCE(SUM(s.qty_on_hand),0) ASC
-      LIMIT $2
-    `, [like, limit])
-    return res.json(rows)
-  }
+  const rows = await svcGetLowStocks(AppDataSource, { limit, warehouse, q })
+  return res.json(rows)
 })
 
 router.get('/metrics/low-stocks.csv', async (req: Request, res: Response) => {
   const limit = Math.max(1, Math.min(100, Number(req.query.limit || 10)))
   const warehouse = (req.query.warehouse as string | undefined)
   const q = (req.query.q as string | undefined)
-  const like = `%${(q || '').trim()}%`
-  let rows: any[] = []
-  if (warehouse) {
-    rows = await AppDataSource.query(`
-      SELECT m.code AS materialCode, COALESCE(SUM(CASE WHEN w.code = $1 THEN s.qty_on_hand ELSE 0 END),0) AS qty
-      FROM materials m
-      LEFT JOIN stocks s ON s.material_id = m.id
-      LEFT JOIN warehouses w ON w.id = s.warehouse_id
-      WHERE ($2 = '%%' OR m.code ILIKE $2 OR m.name ILIKE $2)
-      GROUP BY m.code
-      ORDER BY COALESCE(SUM(CASE WHEN w.code = $1 THEN s.qty_on_hand ELSE 0 END),0) ASC
-      LIMIT $3
-    `, [warehouse, like, limit])
-  } else {
-    rows = await AppDataSource.query(`
-      SELECT m.code AS materialCode, COALESCE(SUM(s.qty_on_hand),0) AS qty
-      FROM materials m LEFT JOIN stocks s ON s.material_id = m.id
-      WHERE ($1 = '%%' OR m.code ILIKE $1 OR m.name ILIKE $1)
-      GROUP BY m.code
-      ORDER BY COALESCE(SUM(s.qty_on_hand),0) ASC
-      LIMIT $2
-    `, [like, limit])
-  }
+  const rows: any[] = await svcGetLowStocks(AppDataSource, { limit, warehouse, q })
   const header = ['materialCode','qty']
   const csv = [header.join(',')].concat(rows.map((r:any)=> `${r.materialcode||r.materialCode},${r.qty}`)).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
@@ -1449,6 +1267,46 @@ router.get('/metrics/weekly.csv', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', 'attachment; filename="weekly-trends.csv"')
   res.send('\ufeff' + csv)
+})
+
+// Compare trends: multi-material daily trends
+router.get('/metrics/trends/compare', async (req: Request, res: Response) => {
+  const materials = (req.query.materials as string || '').split(',').map(s=> s.trim()).filter(Boolean).slice(0, 5)
+  if (!materials.length) return res.json({ days: 0, dates: [], series: [] })
+  const days = Math.max(1, Math.min(60, Number((req.query.days as any) || 14)))
+  const dateFrom = (req.query.dateFrom as string | undefined)
+  const dateTo = (req.query.dateTo as string | undefined)
+  const base = await svcGetTrends(AppDataSource, { days, dateFrom, dateTo })
+  const series = [] as any[]
+  for (const code of materials) {
+    const t = await svcGetTrends(AppDataSource, { days, dateFrom, dateTo, materialCode: code })
+    series.push({ materialCode: code, data: t.data })
+  }
+  res.json({ days: base.days, dates: base.data.map(d=> d.date), series })
+})
+
+router.get('/metrics/trends/compare.csv', async (req: Request, res: Response) => {
+  const materials = (req.query.materials as string || '').split(',').map(s=> s.trim()).filter(Boolean).slice(0, 5)
+  const days = Math.max(1, Math.min(60, Number((req.query.days as any) || 14)))
+  const dateFrom = (req.query.dateFrom as string | undefined)
+  const dateTo = (req.query.dateTo as string | undefined)
+  const base = await svcGetTrends(AppDataSource, { days, dateFrom, dateTo })
+  const dates = base.data.map(d=> d.date)
+  const header = ['date'].concat(materials.map(m=> `in_${m}`)).concat(materials.map(m=> `out_${m}`))
+  const rows: string[] = [header.join(',')]
+  const seriesData: Record<string, { in: Map<string, number>; out: Map<string, number> }> = {}
+  for (const code of materials) {
+    const t = await svcGetTrends(AppDataSource, { days, dateFrom, dateTo, materialCode: code })
+    seriesData[code] = { in: new Map(t.data.map((r:any)=> [r.date, r.inbounds])), out: new Map(t.data.map((r:any)=> [r.date, r.outbounds])) }
+  }
+  for (const d of dates) {
+    const inCols = materials.map(m=> String(seriesData[m]?.in.get(d) ?? 0))
+    const outCols = materials.map(m=> String(seriesData[m]?.out.get(d) ?? 0))
+    rows.push([d, ...inCols, ...outCols].join(','))
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', 'attachment; filename="trends-compare.csv"')
+  res.send('\ufeff' + rows.join('\n'))
 })
 
 // ---------- Global Search ----------
