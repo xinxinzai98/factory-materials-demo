@@ -85,3 +85,13 @@
 1) 构建与预览前端后，首次访问页面确保 SW 注册（浏览器 Application/Service Workers 可见）。
 2) 切换浏览器离线模式或断网，页面顶部出现“离线状态”横幅；返回或刷新非 /api 页面，能够使用已缓存的静态资源继续浏览（接口请求不可用）。
 3) 当发布新版本且 SW 准备就绪时，右上区域出现“有更新，点击刷新”按钮，点击后页面刷新并加载新版本。
+
+### G. 指标 CSV 导出校验（文件名覆盖 + 表头）
+1) 打开“分析/报表”页，点击趋势/周趋势/低库存/趋势对比的“导出”。
+2) 期待：下载的文件名包含时间戳（如 trends-YYYYMMDD-HHmmss.csv），与实际保存一致（后端 filename 覆盖）。
+3) 打开 CSV，首行表头分别为：
+	- 趋势：date,inbounds,outbounds
+	- 周趋势：week,inbounds,outbounds
+	- 低库存：materialCode,qty
+	- 趋势对比：date, in_*..., out_*...
+4) 命令行可运行：`npm run test:export-metrics`（服务器需运行）以自动检查。

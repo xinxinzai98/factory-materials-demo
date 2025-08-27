@@ -1226,7 +1226,10 @@ router.get('/metrics/trends.csv', async (req: Request, res: Response) => {
   const header = ['date','inbounds','outbounds']
   const csv = [header.join(',')].concat(data.map(r=> `${r.date},${r.inbounds},${r.outbounds}`)).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', 'attachment; filename="trends.csv"')
+  {
+    const fn = (req.query.filename as string | undefined) || 'trends.csv'
+    res.setHeader('Content-Disposition', `attachment; filename="${fn}"`)
+  }
   res.send('\ufeff' + csv)
 })
 
@@ -1247,7 +1250,10 @@ router.get('/metrics/low-stocks.csv', async (req: Request, res: Response) => {
   const header = ['materialCode','qty']
   const csv = [header.join(',')].concat(rows.map((r:any)=> `${r.materialcode||r.materialCode},${r.qty}`)).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', 'attachment; filename="low-stocks.csv"')
+  {
+    const fn = (req.query.filename as string | undefined) || 'low-stocks.csv'
+    res.setHeader('Content-Disposition', `attachment; filename="${fn}"`)
+  }
   res.send('\ufeff' + csv)
 })
 
@@ -1364,7 +1370,10 @@ router.get('/metrics/weekly.csv', async (req: Request, res: Response) => {
   const rows = keys.map(k=> ({ week: k, inbounds: mapIn.get(k) || 0, outbounds: mapOut.get(k) || 0 }))
   const csv = [header.join(',')].concat(rows.map(r=> `${r.week},${r.inbounds},${r.outbounds}`)).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', 'attachment; filename="weekly-trends.csv"')
+  {
+    const fn = (req.query.filename as string | undefined) || 'weekly-trends.csv'
+    res.setHeader('Content-Disposition', `attachment; filename="${fn}"`)
+  }
   res.send('\ufeff' + csv)
 })
 
@@ -1404,7 +1413,10 @@ router.get('/metrics/trends/compare.csv', async (req: Request, res: Response) =>
     rows.push([d, ...inCols, ...outCols].join(','))
   }
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', 'attachment; filename="trends-compare.csv"')
+  {
+    const fn = (req.query.filename as string | undefined) || 'trends-compare.csv'
+    res.setHeader('Content-Disposition', `attachment; filename="${fn}"`)
+  }
   res.send('\ufeff' + rows.join('\n'))
 })
 

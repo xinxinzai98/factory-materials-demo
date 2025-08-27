@@ -2,6 +2,7 @@ import React from 'react'
 import { Card, Col, Row, Typography, Space, Empty, Segmented, Button, DatePicker, Select, Input } from 'antd'
 import dayjs from 'dayjs'
 import { api } from '@/api/http'
+import { tsSuffix } from '@/utils/time'
 
 export default function AnalyticsPage() {
   const [stats, setStats] = React.useState<any>({})
@@ -73,9 +74,9 @@ export default function AnalyticsPage() {
             <Space>
               <Segmented size="small" value={mode} onChange={(v)=> setMode(v as any)} options={[{label:'按日', value:'daily'},{label:'按周', value:'weekly'}]} />
               {mode==='daily' ? (
-        <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ days: '30', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), ...(materialCode.trim()?{ materialCode: materialCode.trim() }: {}) }).toString(); const a=document.createElement('a'); a.href='/api/metrics/trends.csv?'+qs; a.download='trends.csv'; a.click(); }}>导出</Button>
+  <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ days: '30', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), ...(materialCode.trim()?{ materialCode: materialCode.trim() }: {}), filename: `trends-${tsSuffix()}.csv` }).toString(); const a=document.createElement('a'); a.href='/api/metrics/trends.csv?'+qs; a.download=`trends-${tsSuffix()}.csv`; a.click(); }}>导出</Button>
               ) : (
-        <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ weeks: '12', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), ...(materialCode.trim()?{ materialCode: materialCode.trim() }: {}) }).toString(); const a=document.createElement('a'); a.href='/api/metrics/weekly.csv?'+qs; a.download='weekly-trends.csv'; a.click(); }}>导出</Button>
+  <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ weeks: '12', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), ...(materialCode.trim()?{ materialCode: materialCode.trim() }: {}), filename: `weekly-trends-${tsSuffix()}.csv` }).toString(); const a=document.createElement('a'); a.href='/api/metrics/weekly.csv?'+qs; a.download=`weekly-trends-${tsSuffix()}.csv`; a.click(); }}>导出</Button>
               )}
             </Space>
           }>
@@ -114,7 +115,7 @@ export default function AnalyticsPage() {
                 value={q} onChange={(e)=> setQ(e.target.value)}
                 onPressEnter={()=> load(mode)}
               />
-              <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ limit: '10', ...(warehouse?{ warehouse }:{}), ...(q.trim()?{ q: q.trim() }: {}) }).toString(); const a=document.createElement('a'); a.href='/api/metrics/low-stocks.csv?'+qs; a.download='low-stocks.csv'; a.click(); }}>导出</Button>
+              <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ limit: '10', ...(warehouse?{ warehouse }:{}), ...(q.trim()?{ q: q.trim() }: {}), filename: `low-stocks-${tsSuffix()}.csv` }).toString(); const a=document.createElement('a'); a.href='/api/metrics/low-stocks.csv?'+qs; a.download=`low-stocks-${tsSuffix()}.csv`; a.click(); }}>导出</Button>
             </Space>
           }>
             {lowStocks.length ? (
@@ -152,8 +153,8 @@ export default function AnalyticsPage() {
           <Button size="small" onClick={()=>{
             const materials = compareCodes.split(',').map(s=> s.trim()).filter(Boolean).slice(0,5).join(',')
             if (!materials) return
-            const qs = new URLSearchParams({ days: '30', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), materials }).toString()
-            const a=document.createElement('a'); a.href='/api/metrics/trends/compare.csv?'+qs; a.download='trends-compare.csv'; a.click();
+            const qs = new URLSearchParams({ days: '30', ...(dateRange?{ dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }:{}), materials, filename: `trends-compare-${tsSuffix()}.csv` }).toString()
+            const a=document.createElement('a'); a.href='/api/metrics/trends/compare.csv?'+qs; a.download=`trends-compare-${tsSuffix()}.csv`; a.click();
           }}>导出</Button>
         </Space>}>
           <CompareTrends materialsInput={compareCodes} dateRange={dateRange} />

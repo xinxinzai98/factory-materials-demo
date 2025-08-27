@@ -93,6 +93,13 @@
 - 自定义导出：入/出库列表与明细均改为 JSON 驱动，支持勾选字段、列顺序、自定义列头与模板（localStorage 持久化）。
 - 导出字段一致性：新增 `server/src/scripts/export-parity.ts`，校验 CSV 表头与 JSON 字段命名一致；CI/本地可运行 `npm run test:export-parity`。
 
+#### Analytics/报表导出
+- 所有 metrics CSV 接口支持通过 `filename` 查询参数覆盖下载文件名：
+  - GET /api/metrics/trends.csv?filename=trends-YYYYMMDD-HHmmss.csv
+  - GET /api/metrics/weekly.csv?filename=weekly-trends-YYYYMMDD-HHmmss.csv
+  - GET /api/metrics/low-stocks.csv?filename=low-stocks-YYYYMMDD-HHmmss.csv
+  - GET /api/metrics/trends/compare.csv?filename=trends-compare-YYYYMMDD-HHmmss.csv
+
 ### 字段映射与格式约定（CSV/JSON）
 - 命名与大小写：统一使用 camelCase（如 createdAt、materialCode）。对原始 SQL 原生别名需用双引号包裹以保留大小写。
 - 日期：CSV 统一输出 ISO8601（toISOString），JSON 为 ISO 字符串或数据库返回的时间戳字符串；消费端按日期列处理（Excel 会识别 ISO）。
