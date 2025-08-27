@@ -76,8 +76,8 @@ export default function StocksPage() {
             const values = form.getFieldsValue()
             const params: Record<string, string> = {}
             Object.entries(values).forEach(([k, v])=> { if (v !== undefined && v !== null && String(v).length>0) params[k] = String(v) })
-            const sp = new URLSearchParams(params).toString()
-            window.open('/api/stocks.csv' + (sp?`?${sp}`:''), '_blank')
+            const sp = new URLSearchParams({ ...params, filename: `stocks-${tsSuffix()}.csv` }).toString()
+            window.open('/api/stocks.csv?' + sp, '_blank')
           }}>导出 CSV</Button>
         </Form.Item>
         <Form.Item>

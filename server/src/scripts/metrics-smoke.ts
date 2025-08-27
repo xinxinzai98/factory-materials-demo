@@ -14,6 +14,12 @@ async function req(path: string) {
 }
 
 async function main() {
+  // Wait until server is healthy
+  const start = Date.now()
+  while (Date.now() - start < 15000) {
+    try { const h = await req('/../health'); if ((h as any)?.status === 'ok') break } catch {}
+    await new Promise(r=> setTimeout(r, 500))
+  }
   console.log('[smoke] metrics/dashboard')
   const dash = await req('/metrics/dashboard')
   console.log('  materialsCount:', dash.materialsCount, 'stocksQtyOnHand:', dash.stocksQtyOnHand)

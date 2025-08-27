@@ -72,6 +72,15 @@
 4) 从通知中心点击“库存预警/临期预警/滞销预警”，应打开库存页并看到查询条件自动填入（URL 带 materialCode/batchNo），列表随即加载。
 5) 入/出库列表页：可点击“自定义 Excel”（列表）或“自定义明细”，勾选导出字段；列表使用 JSON 源数据导出以避免 CSV 精度/格式问题，明细暂以 CSV→XLSX 转换（后续可升级为列级过滤）。
 
+### F. 导出一致性与格式测试
+- 字段对齐：`npm run test:export-parity` 校验 CSV 表头与 JSON 字段命名一致。
+- 日期格式：`npm run test:export-format` 校验各 CSV 的 createdAt 为 ISO 风格（包含 `T`）。
+- 数值可解析性：`npm run test:export-number` 校验 stocks.csv 的数量列（qtyOnHand/qtyAllocated/qtyAvailable）皆为可解析数字。
+
+约定：
+- CSV 日期使用 ISO8601；数量列为纯数字（不带千分位）；空值用空字符串表示。
+- 所有导出接口接受可选 `filename` 查询参数，以覆盖下载文件名。
+
 ### F. PWA 与离线提示
 1) 构建与预览前端后，首次访问页面确保 SW 注册（浏览器 Application/Service Workers 可见）。
 2) 切换浏览器离线模式或断网，页面顶部出现“离线状态”横幅；返回或刷新非 /api 页面，能够使用已缓存的静态资源继续浏览（接口请求不可用）。

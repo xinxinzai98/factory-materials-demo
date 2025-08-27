@@ -236,7 +236,7 @@ router.get('/stocks.csv', async (req: Request, res: Response) => {
     expDate: r.expDate,
     qtyOnHand: r.qtyOnHand,
     qtyAllocated: r.qtyAllocated,
-    qtyAvailable: String(Number(r.qtyOnHand) - Number(r.qtyAllocated)),
+  qtyAvailable: Number(r.qtyOnHand) - Number(r.qtyAllocated),
   }));
   const header = ['materialCode','warehouse','location','batchNo','expDate','qtyOnHand','qtyAllocated','qtyAvailable'];
   const escape = (v: any) => {
@@ -245,7 +245,8 @@ router.get('/stocks.csv', async (req: Request, res: Response) => {
   }
   const csv = [header.join(',')].concat(data.map(r=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="stocks.csv"');
+  const fn = (req.query.filename as string | undefined) || 'stocks.csv'
+  res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
   res.send('\ufeff' + csv);
 });
 
@@ -284,7 +285,8 @@ router.get('/inbounds.csv', async (req: Request, res: Response) => {
   const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
   const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="inbounds.csv"');
+  const fn = (req.query.filename as string | undefined) || 'inbounds.csv'
+  res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
   res.send('\ufeff' + csv);
 })
 
@@ -318,7 +320,8 @@ router.get('/inbound-items.csv', async (req: Request, res: Response) => {
   const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"';
   const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="inbound-items.csv"');
+  const fn = (req.query.filename as string | undefined) || 'inbound-items.csv'
+  res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
   res.send('\ufeff' + csv);
 })
 
@@ -585,7 +588,8 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
           const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n')
           res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-          res.setHeader('Content-Disposition', 'attachment; filename="outbounds.csv"');
+          const fn = (req.query.filename as string | undefined) || 'outbounds.csv'
+          res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
           res.send('\ufeff' + csv);
         })
 
@@ -618,7 +622,8 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"';
           const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n');
           res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-          res.setHeader('Content-Disposition', 'attachment; filename="outbound-items.csv"');
+          const fn = (req.query.filename as string | undefined) || 'outbound-items.csv'
+          res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
           res.send('\ufeff' + csv);
         })
 
@@ -1034,7 +1039,8 @@ router.get('/notifications.csv', async (req: Request, res: Response) => {
   const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
   const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape((r as any)[h])).join(','))).join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="notifications.csv"');
+  const fn = (req.query.filename as string | undefined) || 'notifications.csv'
+  res.setHeader('Content-Disposition', `attachment; filename="${fn}` + '"');
   res.send('\ufeff' + csv);
 });
 

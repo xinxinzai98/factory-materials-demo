@@ -204,7 +204,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
                   <Space>
                     <Segmented size="small" value={notifStatus} onChange={(v)=> setNotifStatus(v as any)} options={[{ label:'全部', value:'ALL' }, { label:'仅未读', value:'UNREAD' }]} />
                     <Button size="small" onClick={loadNotifications}>刷新</Button>
-                    <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ ...(notifStatus==='UNREAD'?{ status:'UNREAD' }:{} ) }).toString(); const a=document.createElement('a'); a.href='/api/notifications.csv'+(qs?'?'+qs:''); a.download='notifications.csv'; a.click(); }}>导出</Button>
+                    <Button size="small" onClick={()=>{ const qs = new URLSearchParams({ ...(notifStatus==='UNREAD'?{ status:'UNREAD' }:{} ), filename: `notifications-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'').replace(/\..*$/,'')}.csv` }).toString(); const a=document.createElement('a'); a.href='/api/notifications.csv?'+qs; a.download='notifications.csv'; a.click(); }}>导出</Button>
                     <Button size="small" onClick={async()=>{ await api.post('/notifications/mark-all-read'); loadNotifications() }}>全部已读</Button>
                   </Space>
                 </div>

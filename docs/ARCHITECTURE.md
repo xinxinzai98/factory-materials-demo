@@ -93,6 +93,14 @@
 - 自定义导出：入/出库列表与明细均改为 JSON 驱动，支持勾选字段、列顺序、自定义列头与模板（localStorage 持久化）。
 - 导出字段一致性：新增 `server/src/scripts/export-parity.ts`，校验 CSV 表头与 JSON 字段命名一致；CI/本地可运行 `npm run test:export-parity`。
 
+### 字段映射与格式约定（CSV/JSON）
+- 命名与大小写：统一使用 camelCase（如 createdAt、materialCode）。对原始 SQL 原生别名需用双引号包裹以保留大小写。
+- 日期：CSV 统一输出 ISO8601（toISOString），JSON 为 ISO 字符串或数据库返回的时间戳字符串；消费端按日期列处理（Excel 会识别 ISO）。
+- 数值：数量类（qtyOnHand/qtyAllocated/qtyAvailable/qty 等）使用无千分位的纯数字字符串或数值，CSV 中不带分隔符，便于二次处理。
+- 空值：CSV 为空字符串，JSON 为 null；前端在 Excel 导出时保持空单元格。
+
+对照示例（入库明细 CSV/JSON 对齐关键字段）：code、status、createdAt、sourceType、supplier、materialCode、qty、batchNo、expDate。
+
 ## 构建与拆包策略（前端）
 - 路由级懒加载：所有页面以 `React.lazy` 按路由拆分，减少首屏体积。
 - 手动 vendor 分包（见 `web/vite.config.ts` → `manualChunks`）：

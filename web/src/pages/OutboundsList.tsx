@@ -89,8 +89,8 @@ export default function OutboundsListPage() {
                   q.dateFrom = v.dateRange[0]?.format('YYYY-MM-DD')
                   q.dateTo = v.dateRange[1]?.format('YYYY-MM-DD')
                 }
-                const sp = new URLSearchParams(q).toString()
-                window.open('/api/outbounds.csv' + (sp?`?${sp}`:''), '_blank')
+                const sp = new URLSearchParams({ ...q, filename: `outbounds-${tsSuffix()}.csv` }).toString()
+                window.open('/api/outbounds.csv?' + sp, '_blank')
               }}>导出 CSV</Button>
               <Button onClick={async()=>{
                 const v = form.getFieldsValue()
@@ -102,7 +102,7 @@ export default function OutboundsListPage() {
                   q.dateTo = v.dateRange[1]?.format('YYYY-MM-DD')
                 }
                 try {
-                  const { data } = await api.get('/outbounds.csv', { params: q, responseType: 'text' })
+                  const { data } = await api.get('/outbounds.csv', { params: { ...q, filename: `outbounds-${tsSuffix()}.csv` }, responseType: 'text' })
                   await exportCsvToExcel('出库列表.xlsx', data)
                 } catch { message.error('导出失败') }
               }}>导出 Excel</Button>
@@ -116,8 +116,8 @@ export default function OutboundsListPage() {
                   q.dateFrom = v.dateRange[0]?.format('YYYY-MM-DD')
                   q.dateTo = v.dateRange[1]?.format('YYYY-MM-DD')
                 }
-                const sp = new URLSearchParams(q).toString()
-                window.open('/api/outbound-items.csv' + (sp?`?${sp}`:''), '_blank')
+                const sp = new URLSearchParams({ ...q, filename: `outbound-items-${tsSuffix()}.csv` }).toString()
+                window.open('/api/outbound-items.csv?' + sp, '_blank')
               }}>导出明细</Button>
               <Button onClick={async()=>{
                 const v = form.getFieldsValue()
@@ -129,7 +129,7 @@ export default function OutboundsListPage() {
                   q.dateTo = v.dateRange[1]?.format('YYYY-MM-DD')
                 }
                 try {
-                  const { data } = await api.get('/outbound-items.csv', { params: q, responseType: 'text' })
+                  const { data } = await api.get('/outbound-items.csv', { params: { ...q, filename: `outbound-items-${tsSuffix()}.csv` }, responseType: 'text' })
                   await exportCsvToExcel('出库明细.xlsx', data)
                 } catch { message.error('导出失败') }
               }}>明细 Excel</Button>
