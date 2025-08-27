@@ -1,8 +1,25 @@
 import React from 'react'
-import { Layout, Menu, theme, Typography, Button, Input, Modal, Avatar, Tag, Popover, Divider, Badge, List, Space, Segmented } from 'antd'
+import { Layout, Menu, theme, Typography, Button, Input, Modal, Avatar, Tag, Popover, Divider, Badge, List, Space, Segmented, Alert } from 'antd'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { DatabaseOutlined, InboxOutlined, SendOutlined, SettingOutlined, SwapOutlined, ToolOutlined, DashboardOutlined, ExperimentOutlined, BellOutlined, SearchOutlined, MoonOutlined, SunOutlined, RightOutlined, QuestionCircleOutlined, CrownFilled, EyeOutlined, BarChartOutlined } from '@ant-design/icons'
+import DatabaseOutlined from '@ant-design/icons/DatabaseOutlined'
+import InboxOutlined from '@ant-design/icons/InboxOutlined'
+import SendOutlined from '@ant-design/icons/SendOutlined'
+import SettingOutlined from '@ant-design/icons/SettingOutlined'
+import SwapOutlined from '@ant-design/icons/SwapOutlined'
+import ToolOutlined from '@ant-design/icons/ToolOutlined'
+import DashboardOutlined from '@ant-design/icons/DashboardOutlined'
+import ExperimentOutlined from '@ant-design/icons/ExperimentOutlined'
+import BellOutlined from '@ant-design/icons/BellOutlined'
+import SearchOutlined from '@ant-design/icons/SearchOutlined'
+import MoonOutlined from '@ant-design/icons/MoonOutlined'
+import SunOutlined from '@ant-design/icons/SunOutlined'
+import RightOutlined from '@ant-design/icons/RightOutlined'
+import QuestionCircleOutlined from '@ant-design/icons/QuestionCircleOutlined'
+import CrownFilled from '@ant-design/icons/CrownFilled'
+import EyeOutlined from '@ant-design/icons/EyeOutlined'
+import BarChartOutlined from '@ant-design/icons/BarChartOutlined'
 import Splash from './Splash'
+import { initPWA } from '@/pwa'
 const MaterialsPage = React.lazy(()=> import('@/pages/Materials'))
 const StocksPage = React.lazy(()=> import('@/pages/Stocks'))
 const InboundPage = React.lazy(()=> import('@/pages/Inbound'))
@@ -37,6 +54,7 @@ const items = [
 
 type AppProps = { isDark?: boolean; onToggleTheme?: () => void }
 export default function App({ isDark, onToggleTheme }: AppProps) {
+  React.useEffect(()=>{ initPWA() }, [])
   const loc = useLocation()
   const navigate = useNavigate()
   const { token } = theme.useToken()
@@ -51,6 +69,14 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
   const [notifOpen, setNotifOpen] = React.useState(false)
   const [notifications, setNotifications] = React.useState<any[]>([])
   const [notifStatus, setNotifStatus] = React.useState<'ALL'|'UNREAD'>('ALL')
+  const [isOffline, setIsOffline] = React.useState(!navigator.onLine)
+  React.useEffect(()=>{
+    const on = () => setIsOffline(false)
+    const off = () => setIsOffline(true)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return ()=> { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
   const loadNotifications = React.useCallback(async ()=>{
     try {
       const params: any = {}
@@ -182,6 +208,11 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
           </div>
         </Header>
         <Content style={{ margin: 16 }}>
+          {isOffline && (
+            <div style={{ marginBottom: 12 }}>
+              <Alert type="warning" showIcon message="您处于离线状态" description="可继续浏览已缓存页面，部分接口不可用。" />
+            </div>
+          )}
           <div key={pathname} className="glass-card page-fade" style={{ padding: 16, borderRadius: 12 }}>
             <React.Suspense fallback={<div style={{ padding: 24 }}>加载中...</div>}>
             <Routes>
