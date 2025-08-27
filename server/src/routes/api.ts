@@ -319,6 +319,34 @@ router.get('/inbound-items.csv', async (req: Request, res: Response) => {
   res.send('\ufeff' + csv);
 })
 
+// 入库明细（JSON）便于前端按字段导出
+router.get('/inbound-items', async (req: Request, res: Response) => {
+  const status = req.query.status as string | undefined;
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo = req.query.dateTo as string | undefined;
+  const code = req.query.code as string | undefined;
+  const qb = AppDataSource.getRepository(InboundOrder).createQueryBuilder('o')
+    .leftJoin('o.items','it')
+    .leftJoin('it.material','m')
+    .select([
+      'o.code AS code',
+      'o.status AS status',
+      'o.createdAt AS createdAt',
+      'o.sourceType AS sourceType',
+      'o.supplier AS supplier',
+      'm.code AS materialCode',
+      'it.qty AS qty',
+      'it.batchNo AS batchNo',
+      'it.expDate AS expDate',
+    ]);
+  if (status) qb.andWhere('o.status = :st', { st: status });
+  if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
+  if (dateFrom) qb.andWhere('o.createdAt >= :df', { df: new Date(dateFrom) });
+  if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
+  const rows = await qb.orderBy('o.createdAt','DESC').addOrderBy('o.code','ASC').getRawMany();
+  res.json(rows);
+})
+
 // POST /api/inbounds/draft 创建草稿（不动库存）
 router.post('/inbounds/draft', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const { code, sourceType, supplier, arriveDate, items } = req.body || {}
@@ -587,6 +615,33 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           res.setHeader('Content-Type', 'text/csv; charset=utf-8');
           res.setHeader('Content-Disposition', 'attachment; filename="outbound-items.csv"');
           res.send('\ufeff' + csv);
+        })
+
+        // 出库明细（JSON）
+        router.get('/outbound-items', async (req: Request, res: Response) => {
+          const status = req.query.status as string | undefined;
+          const code = req.query.code as string | undefined;
+          const dateFrom = req.query.dateFrom as string | undefined;
+          const dateTo = req.query.dateTo as string | undefined;
+          const qb = AppDataSource.getRepository(OutboundOrder).createQueryBuilder('o')
+            .leftJoin('o.items','it')
+            .leftJoin('it.material','m')
+            .select([
+              'o.code AS code',
+              'o.status AS status',
+              'o.createdAt AS createdAt',
+              'o.purpose AS purpose',
+              'm.code AS materialCode',
+              'it.qty AS qty',
+              'it.batchPolicy AS batchPolicy',
+              'it.batchNo AS batchNo',
+            ]);
+          if (status) qb.andWhere('o.status = :st', { st: status });
+          if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
+          if (dateFrom) qb.andWhere('o.createdAt >= :df', { df: new Date(dateFrom) });
+          if (dateTo) qb.andWhere('o.createdAt <= :dt', { dt: new Date(dateTo) });
+          const rows = await qb.orderBy('o.createdAt','DESC').addOrderBy('o.code','ASC').getRawMany();
+          res.json(rows);
         })
 
         // POST /api/outbounds/draft 创建草稿（不动库存）

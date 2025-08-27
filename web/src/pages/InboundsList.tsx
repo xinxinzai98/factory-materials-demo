@@ -169,11 +169,13 @@ export default function InboundsListPage() {
             })
             exportToExcel('入库列表-自定义.xlsx', rows)
           } else {
-            // 明细需要拼装展开：从 CSV 转换或从单据 JSON展开。这里直接走 CSV 转换简单可靠
-            const { data: csv } = await api.get('/inbound-items.csv', { params: q, responseType: 'text' })
-            // 简单选择列：再用 selDetailHeaders 过滤列名
-            // 为保持实现简单，我们先将全部列转为 XLSX；高级列过滤可后续完善
-            exportCsvToExcel('入库明细-自定义.xlsx', csv)
+            const { data } = await api.get('/inbound-items', { params: q })
+            const rows = (data||[]).map((r:any)=>{
+              const obj: Record<string, any> = {}
+              inboundDetailFields.filter(f=> selDetailHeaders.includes(f.key)).forEach(f=>{ obj[f.title] = r[f.key] })
+              return obj
+            })
+            exportToExcel('入库明细-自定义.xlsx', rows)
           }
         } catch { message.error('导出失败') } finally { setExcelOpen(null) }
       }}>

@@ -165,8 +165,13 @@ export default function OutboundsListPage() {
             })
             exportToExcel('出库列表-自定义.xlsx', rows)
           } else {
-            const { data: csv } = await api.get('/outbound-items.csv', { params: q, responseType: 'text' })
-            exportCsvToExcel('出库明细-自定义.xlsx', csv)
+            const { data } = await api.get('/outbound-items', { params: q })
+            const rows = (data||[]).map((r:any)=>{
+              const obj: Record<string, any> = {}
+              outboundDetailFields.filter(f=> selDetailHeaders.includes(f.key)).forEach(f=>{ obj[f.title] = r[f.key] })
+              return obj
+            })
+            exportToExcel('出库明细-自定义.xlsx', rows)
           }
         } catch { message.error('导出失败') } finally { setExcelOpen(null) }
       }}>
