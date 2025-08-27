@@ -297,15 +297,15 @@ router.get('/inbound-items.csv', async (req: Request, res: Response) => {
     .leftJoin('o.items','it')
     .leftJoin('it.material','m')
     .select([
-      'o.code AS code',
-      'o.status AS status',
-      'o.createdAt AS createdAt',
-      'o.sourceType AS sourceType',
-      'o.supplier AS supplier',
-      'm.code AS materialCode',
-      'it.qty AS qty',
-      'it.batchNo AS batchNo',
-      'it.expDate AS expDate',
+      'o.code AS "code"',
+      'o.status AS "status"',
+      'o.createdAt AS "createdAt"',
+      'o.sourceType AS "sourceType"',
+      'o.supplier AS "supplier"',
+      'm.code AS "materialCode"',
+      'it.qty AS "qty"',
+      'it.batchNo AS "batchNo"',
+      'it.expDate AS "expDate"',
     ]);
   if (status) qb.andWhere('o.status = :st', { st: status });
   if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
@@ -330,15 +330,15 @@ router.get('/inbound-items', async (req: Request, res: Response) => {
     .leftJoin('o.items','it')
     .leftJoin('it.material','m')
     .select([
-      'o.code AS code',
-      'o.status AS status',
-      'o.createdAt AS createdAt',
-      'o.sourceType AS sourceType',
-      'o.supplier AS supplier',
-      'm.code AS materialCode',
-      'it.qty AS qty',
-      'it.batchNo AS batchNo',
-      'it.expDate AS expDate',
+      'o.code AS "code"',
+      'o.status AS "status"',
+      'o.createdAt AS "createdAt"',
+      'o.sourceType AS "sourceType"',
+      'o.supplier AS "supplier"',
+      'm.code AS "materialCode"',
+      'it.qty AS "qty"',
+      'it.batchNo AS "batchNo"',
+      'it.expDate AS "expDate"',
     ]);
   if (status) qb.andWhere('o.status = :st', { st: status });
   if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
@@ -596,14 +596,14 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
             .leftJoin('o.items','it')
             .leftJoin('it.material','m')
             .select([
-              'o.code AS code',
-              'o.status AS status',
-              'o.createdAt AS createdAt',
-              'o.purpose AS purpose',
-              'm.code AS materialCode',
-              'it.qty AS qty',
-              'it.batchPolicy AS batchPolicy',
-              'it.batchNo AS batchNo',
+              'o.code AS "code"',
+              'o.status AS "status"',
+              'o.createdAt AS "createdAt"',
+              'o.purpose AS "purpose"',
+              'm.code AS "materialCode"',
+              'it.qty AS "qty"',
+              'it.batchPolicy AS "batchPolicy"',
+              'it.batchNo AS "batchNo"',
             ]);
           if (status) qb.andWhere('o.status = :st', { st: status });
           if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });
@@ -628,14 +628,14 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
             .leftJoin('o.items','it')
             .leftJoin('it.material','m')
             .select([
-              'o.code AS code',
-              'o.status AS status',
-              'o.createdAt AS createdAt',
-              'o.purpose AS purpose',
-              'm.code AS materialCode',
-              'it.qty AS qty',
-              'it.batchPolicy AS batchPolicy',
-              'it.batchNo AS batchNo',
+              'o.code AS "code"',
+              'o.status AS "status"',
+              'o.createdAt AS "createdAt"',
+              'o.purpose AS "purpose"',
+              'm.code AS "materialCode"',
+              'it.qty AS "qty"',
+              'it.batchPolicy AS "batchPolicy"',
+              'it.batchNo AS "batchNo"',
             ]);
           if (status) qb.andWhere('o.status = :st', { st: status });
           if (code) qb.andWhere('o.code ILIKE :c', { c: `%${code}%` });

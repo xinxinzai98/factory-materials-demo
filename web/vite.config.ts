@@ -90,13 +90,14 @@ export default defineConfig({
   modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
-        manualChunks(id: string) {
+    manualChunks(id: string) {
           if (id.includes('node_modules')) {
             if (id.includes('react') || id.includes('react-dom')) return 'vendor-react'
             if (id.includes('antd')) return 'vendor-antd'
       if (id.includes('@ant-design/icons')) return 'vendor-icons'
             if (id.includes('rc-') || id.includes('@rc-component')) return 'vendor-rc'
             if (id.includes('dayjs')) return 'vendor-dayjs'
+      if (id.includes('xlsx')) return 'vendor-xlsx'
             return 'vendor'
           }
         }

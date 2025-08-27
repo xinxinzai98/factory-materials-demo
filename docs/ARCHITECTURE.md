@@ -85,3 +85,21 @@
   - 列表与指标（inbounds/outbounds/stocks/metrics）：StaleWhileRevalidate，10min 失效。
   - 通知（notifications）：NetworkFirst，5s 超时兜底缓存，10min 失效。
 - 前端在 App 中展示离线横幅与 SW 更新提示按钮。
+
+## 导出体系与动态加载
+- 前端导出统一走 `web/src/utils/exportExcel.ts`：
+  - 使用 `import('xlsx')` 动态按需加载，避免首屏加载大型依赖。
+  - `exportToExcel` 与 `exportCsvToExcel` 为 async，调用方需 `await`。
+- 自定义导出：入/出库列表与明细均改为 JSON 驱动，支持勾选字段、列顺序、自定义列头与模板（localStorage 持久化）。
+- 导出字段一致性：新增 `server/src/scripts/export-parity.ts`，校验 CSV 表头与 JSON 字段命名一致；CI/本地可运行 `npm run test:export-parity`。
+
+## 构建与拆包策略（前端）
+- 路由级懒加载：所有页面以 `React.lazy` 按路由拆分，减少首屏体积。
+- 手动 vendor 分包（见 `web/vite.config.ts` → `manualChunks`）：
+  - react/react-dom → vendor-react
+  - antd → vendor-antd
+  - @ant-design/icons → vendor-icons
+  - rc-* / @rc-component → vendor-rc
+  - dayjs → vendor-dayjs
+  - xlsx（动态导入）→ vendor-xlsx（稳定 chunk 名便于缓存）
+- 其他：去除 console/debugger，保持较低首屏包体；PWA 预缓存构建产物。

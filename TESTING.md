@@ -166,3 +166,24 @@ npm run test:metrics
 - dashboard 指标字段类型正确、阈值为正；
 - 日/周趋势长度与参数一致；
 - 低库存列表返回数组。
+
+---
+
+## 导出字段一致性测试（CSV 与 JSON 对齐）
+目的：确保“自定义 Excel”所基于的 JSON 与服务端 CSV 导出字段一致，避免用户选择后字段缺失。
+
+运行：
+
+```bash
+cd server
+API_KEY=dev-api-key npm run test:export-parity
+```
+
+校验项：
+- 库存：JSON 应包含 CSV 的全部列（materialCode, warehouse, location, batchNo, expDate, qtyOnHand, qtyAllocated, qtyAvailable）。
+- 入库：列表/明细 JSON 均应包含 CSV 表头中的字段。
+- 出库：列表/明细 JSON 均应包含 CSV 表头中的字段。
+
+通过标准：输出 `export-parity: PASS`。
+
+提示：前端导出使用 xlsx 动态按需加载（见 `web/src/utils/exportExcel.ts`），所有导出调用均为 async/await。
