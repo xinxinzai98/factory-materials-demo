@@ -104,7 +104,7 @@ export default function InboundsListPage() {
                 }
                 try {
                   const { data } = await api.get('/inbounds.csv', { params: q, responseType: 'text' })
-                  exportCsvToExcel('入库列表.xlsx', data)
+                  await exportCsvToExcel('入库列表.xlsx', data)
                 } catch { message.error('导出失败') }
               }}>导出 Excel</Button>
               <Button onClick={()=> { setSelListHeaders(inboundListFields.map(f=>f.key)); setExcelOpen('list') }}>自定义 Excel</Button>
@@ -131,7 +131,7 @@ export default function InboundsListPage() {
                 }
                 try {
                   const { data } = await api.get('/inbound-items.csv', { params: q, responseType: 'text' })
-                  exportCsvToExcel('入库明细.xlsx', data)
+                  await exportCsvToExcel('入库明细.xlsx', data)
                 } catch { message.error('导出失败') }
               }}>明细 Excel</Button>
               <Button onClick={()=> { setSelDetailHeaders(inboundDetailFields.map(f=>f.key)); setExcelOpen('detail') }}>自定义明细</Button>
@@ -180,7 +180,7 @@ export default function InboundsListPage() {
               })
               return obj
             })
-            exportToExcel('入库列表-自定义.xlsx', rows)
+            await exportToExcel('入库列表-自定义.xlsx', rows)
           } else {
             const { data } = await api.get('/inbound-items', { params: q })
             let keys = inboundDetailFields.map(f=>f.key).filter(k=> selDetailHeaders.includes(k))
@@ -194,7 +194,7 @@ export default function InboundsListPage() {
               })
               return obj
             })
-            exportToExcel('入库明细-自定义.xlsx', rows)
+            await exportToExcel('入库明细-自定义.xlsx', rows)
           }
         } catch { message.error('导出失败') } finally { setExcelOpen(null) }
       }}>

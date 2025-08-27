@@ -97,7 +97,7 @@ export default function StocksPage() {
         ]}
       />
 
-      <Modal title="导出 Excel" open={excelOpen} onCancel={()=> setExcelOpen(false)} onOk={()=>{
+  <Modal title="导出 Excel" open={excelOpen} onCancel={()=> setExcelOpen(false)} onOk={async()=>{
         const cols = allFields.filter(f=> selectedFields.includes(f.key as string))
         if (!cols.length) { message.warning('请选择至少一个字段'); return }
         const rows = data.map(r=> {
@@ -106,7 +106,7 @@ export default function StocksPage() {
           return obj
         })
         try {
-          exportToExcel('库存明细.xlsx', rows)
+          await exportToExcel('库存明细.xlsx', rows)
         } catch (e) {
           message.error('导出失败')
         }

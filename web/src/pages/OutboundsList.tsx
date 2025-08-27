@@ -102,7 +102,7 @@ export default function OutboundsListPage() {
                 }
                 try {
                   const { data } = await api.get('/outbounds.csv', { params: q, responseType: 'text' })
-                  exportCsvToExcel('出库列表.xlsx', data)
+                  await exportCsvToExcel('出库列表.xlsx', data)
                 } catch { message.error('导出失败') }
               }}>导出 Excel</Button>
               <Button onClick={()=> { setSelListHeaders(outboundListFields.map(f=>f.key)); setExcelOpen('list') }}>自定义 Excel</Button>
@@ -129,7 +129,7 @@ export default function OutboundsListPage() {
                 }
                 try {
                   const { data } = await api.get('/outbound-items.csv', { params: q, responseType: 'text' })
-                  exportCsvToExcel('出库明细.xlsx', data)
+                  await exportCsvToExcel('出库明细.xlsx', data)
                 } catch { message.error('导出失败') }
               }}>明细 Excel</Button>
               <Button onClick={()=> { setSelDetailHeaders(outboundDetailFields.map(f=>f.key)); setExcelOpen('detail') }}>自定义明细</Button>
@@ -176,7 +176,7 @@ export default function OutboundsListPage() {
               })
               return obj
             })
-            exportToExcel('出库列表-自定义.xlsx', rows)
+            await exportToExcel('出库列表-自定义.xlsx', rows)
           } else {
             const { data } = await api.get('/outbound-items', { params: q })
             let keys = outboundDetailFields.map(f=>f.key).filter(k=> selDetailHeaders.includes(k))
@@ -189,7 +189,7 @@ export default function OutboundsListPage() {
               })
               return obj
             })
-            exportToExcel('出库明细-自定义.xlsx', rows)
+            await exportToExcel('出库明细-自定义.xlsx', rows)
           }
         } catch { message.error('导出失败') } finally { setExcelOpen(null) }
       }}>
