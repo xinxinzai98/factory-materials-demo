@@ -77,3 +77,11 @@
   - 设置：系统参数、API 基址/Key、主题切换（OP/ADMIN 可见；部分只读）
 
 > 前端按 localStorage 中 role 进行菜单过滤；后端路由由 RBAC 强制校验，确保越权无效。
+
+## PWA 与缓存策略
+- 预缓存：构建产物通过 generateSW 生成 precache manifest。
+- 运行时缓存（workbox.runtimeCaching，见 `web/vite.config.ts`）：
+  - 参考数据（warehouses/locations/materials/settings）：CacheFirst，24h 失效。
+  - 列表与指标（inbounds/outbounds/stocks/metrics）：StaleWhileRevalidate，10min 失效。
+  - 通知（notifications）：NetworkFirst，5s 超时兜底缓存，10min 失效。
+- 前端在 App 中展示离线横幅与 SW 更新提示按钮。

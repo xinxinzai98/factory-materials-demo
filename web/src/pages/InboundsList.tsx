@@ -31,8 +31,12 @@ export default function InboundsListPage() {
   ]
   const [selListHeaders, setSelListHeaders] = useState<string[]>(inboundListFields.map(f=>f.key))
   const [selDetailHeaders, setSelDetailHeaders] = useState<string[]>(inboundDetailFields.map(f=>f.key))
+  // 列表与明细分开管理：列表使用 inbound-list 作用域，明细使用 inbound-detail 作用域
+  const [headerMapList, setHeaderMapList] = useState<Record<string,string>>({})
   const [headerMap, setHeaderMap] = useState<Record<string,string>>({})
+  const [tplNameList, setTplNameList] = useState('')
   const [tplName, setTplName] = useState('')
+  const [tplListList, setTplListList] = useState(()=> listTemplates('inbound-list'))
   const [tplList, setTplList] = useState(()=> listTemplates('inbound-detail'))
 
   const load = async (params?: any) => {
@@ -164,11 +168,16 @@ export default function InboundsListPage() {
         if (v.dateRange) { q.dateFrom = v.dateRange[0]?.format('YYYY-MM-DD'); q.dateTo = v.dateRange[1]?.format('YYYY-MM-DD') }
         try {
           if (excelOpen === 'list') {
-            // 用 JSON 列表导出，避免 CSV 精度/格式问题
+            // 用 JSON 列表导出，支持“选择顺序”与“自定义列头”
             const { data } = await api.get('/inbounds', { params: { ...q, page: 1, pageSize: 10000 } })
+            let keys = inboundListFields.map(f=>f.key).filter(k=> selListHeaders.includes(k))
+            keys = selListHeaders.filter(k=> keys.includes(k))
             const rows = (data?.data||[]).map((r:any)=>{
               const obj: Record<string, any> = {}
-              inboundListFields.filter(f=> selListHeaders.includes(f.key)).forEach(f=>{ obj[f.title] = r[f.key] })
+              keys.forEach(k=>{
+                const title = headerMapList[k] || inboundListFields.find(f=> f.key===k)?.title || k
+                obj[title] = r[k]
+              })
               return obj
             })
             exportToExcel('入库列表-自定义.xlsx', rows)
@@ -197,6 +206,23 @@ export default function InboundsListPage() {
                 {inboundListFields.map(f=> <Checkbox key={f.key} value={f.key}>{f.title}</Checkbox>)}
               </Space>
             </Checkbox.Group>
+            <Divider />
+            <div style={{ marginBottom: 8 }}>列名自定义（留空则使用默认名）：</div>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {inboundListFields.filter(f=> selListHeaders.includes(f.key)).map(f=> (
+                <div key={f.key} style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ width: 120, lineHeight: '32px' }}>{f.title}</div>
+                  <AntInput placeholder={`自定义列名（默认：${f.title}）`} value={headerMapList[f.key]||''} onChange={e=> setHeaderMapList(h=> ({ ...h, [f.key]: e.target.value }))} />
+                </div>
+              ))}
+            </Space>
+            <Divider />
+            <Space>
+              <AntInput placeholder="保存为方案名称" value={tplNameList} onChange={e=> setTplNameList(e.target.value)} style={{ width: 200 }} />
+              <Button onClick={()=>{ if(!tplNameList.trim()) { message.warning('请输入方案名称'); return } upsertTemplate('inbound-list', tplNameList.trim(), selListHeaders, headerMapList); setTplListList(listTemplates('inbound-list')); message.success('已保存导出方案') }}>保存方案</Button>
+              {tplListList.length>0 && <Select placeholder="加载方案" style={{ width: 220 }} options={tplListList.map(t=> ({ label: t.name, value: t.name }))} onChange={(name)=>{ const t = listTemplates('inbound-list').find(x=> x.name===name); if(!t) return; setSelListHeaders(t.keys); setHeaderMapList(t.headerMap||{}); }} />}
+              {tplListList.length>0 && <Button danger onClick={()=>{ if(!tplNameList.trim()) { message.warning('请输入要删除的方案名称'); return } removeTemplate('inbound-list', tplNameList.trim()); setTplListList(listTemplates('inbound-list')); message.success('已删除'); }}>删除方案</Button>}
+            </Space>
           </>
         ) : (
           <>

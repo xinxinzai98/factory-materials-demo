@@ -29,8 +29,12 @@ export default function OutboundsListPage() {
   ]
   const [selListHeaders, setSelListHeaders] = useState<string[]>(outboundListFields.map(f=>f.key))
   const [selDetailHeaders, setSelDetailHeaders] = useState<string[]>(outboundDetailFields.map(f=>f.key))
+  // 列表与明细分开管理
+  const [headerMapList, setHeaderMapList] = useState<Record<string,string>>({})
   const [headerMap, setHeaderMap] = useState<Record<string,string>>({})
+  const [tplNameList, setTplNameList] = useState('')
   const [tplName, setTplName] = useState('')
+  const [tplListList, setTplListList] = useState(()=> listTemplates('outbound-list'))
   const [tplList, setTplList] = useState(()=> listTemplates('outbound-detail'))
 
   const load = async (params?: any) => {
@@ -162,9 +166,14 @@ export default function OutboundsListPage() {
         try {
           if (excelOpen === 'list') {
             const { data } = await api.get('/outbounds', { params: { ...q, page: 1, pageSize: 10000 } })
+            let keys = outboundListFields.map(f=>f.key).filter(k=> selListHeaders.includes(k))
+            keys = selListHeaders.filter(k=> keys.includes(k))
             const rows = (data?.data||[]).map((r:any)=>{
               const obj: Record<string, any> = {}
-              outboundListFields.filter(f=> selListHeaders.includes(f.key)).forEach(f=>{ obj[f.title] = r[f.key] })
+              keys.forEach(k=>{
+                const title = headerMapList[k] || outboundListFields.find(f=> f.key===k)?.title || k
+                obj[title] = r[k]
+              })
               return obj
             })
             exportToExcel('出库列表-自定义.xlsx', rows)
@@ -192,6 +201,23 @@ export default function OutboundsListPage() {
                 {outboundListFields.map(f=> <Checkbox key={f.key} value={f.key}>{f.title}</Checkbox>)}
               </Space>
             </Checkbox.Group>
+            <Divider />
+            <div style={{ marginBottom: 8 }}>列名自定义（留空则使用默认名）：</div>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {outboundListFields.filter(f=> selListHeaders.includes(f.key)).map(f=> (
+                <div key={f.key} style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ width: 120, lineHeight: '32px' }}>{f.title}</div>
+                  <AntInput placeholder={`自定义列名（默认：${f.title}）`} value={headerMapList[f.key]||''} onChange={e=> setHeaderMapList(h=> ({ ...h, [f.key]: e.target.value }))} />
+                </div>
+              ))}
+            </Space>
+            <Divider />
+            <Space>
+              <AntInput placeholder="保存为方案名称" value={tplNameList} onChange={e=> setTplNameList(e.target.value)} style={{ width: 200 }} />
+              <Button onClick={()=>{ if(!tplNameList.trim()) { message.warning('请输入方案名称'); return } upsertTemplate('outbound-list', tplNameList.trim(), selListHeaders, headerMapList); setTplListList(listTemplates('outbound-list')); message.success('已保存导出方案') }}>保存方案</Button>
+              {tplListList.length>0 && <Select placeholder="加载方案" style={{ width: 220 }} options={tplListList.map(t=> ({ label: t.name, value: t.name }))} onChange={(name)=>{ const t = listTemplates('outbound-list').find(x=> x.name===name); if(!t) return; setSelListHeaders(t.keys); setHeaderMapList(t.headerMap||{}); }} />}
+              {tplListList.length>0 && <Button danger onClick={()=>{ if(!tplNameList.trim()) { message.warning('请输入要删除的方案名称'); return } removeTemplate('outbound-list', tplNameList.trim()); setTplListList(listTemplates('outbound-list')); message.success('已删除'); }}>删除方案</Button>}
+            </Space>
           </>
         ) : (
           <>
