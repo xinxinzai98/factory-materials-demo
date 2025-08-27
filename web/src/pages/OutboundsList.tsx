@@ -1,14 +1,33 @@
 import { useEffect, useState } from 'react'
-import { Button, DatePicker, Form, Input, Select, Space, Table, Tag, message } from 'antd'
+import { Button, DatePicker, Form, Input, Select, Space, Table, Tag, message, Modal, Checkbox } from 'antd'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/api/http'
-import { exportCsvToExcel } from '@/utils/exportExcel'
+import { exportCsvToExcel, exportToExcel } from '@/utils/exportExcel'
 
 export default function OutboundsListPage() {
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm()
   const [page, setPage] = useState({ page: 1, pageSize: 20, total: 0 })
+  const [excelOpen, setExcelOpen] = useState<null | 'list' | 'detail'>(null)
+  const outboundListFields = [
+    { key: 'code', title: '单号' },
+    { key: 'purpose', title: '用途' },
+    { key: 'status', title: '状态' },
+    { key: 'createdAt', title: '创建时间' },
+  ]
+  const outboundDetailFields = [
+    { key: 'code', title: '单号' },
+    { key: 'status', title: '状态' },
+    { key: 'createdAt', title: '创建时间' },
+    { key: 'purpose', title: '用途' },
+    { key: 'materialCode', title: '物料' },
+    { key: 'qty', title: '数量' },
+    { key: 'batchPolicy', title: '批次策略' },
+    { key: 'batchNo', title: '批次' },
+  ]
+  const [selListHeaders, setSelListHeaders] = useState<string[]>(outboundListFields.map(f=>f.key))
+  const [selDetailHeaders, setSelDetailHeaders] = useState<string[]>(outboundDetailFields.map(f=>f.key))
 
   const load = async (params?: any) => {
     setLoading(true)
@@ -78,6 +97,7 @@ export default function OutboundsListPage() {
                   exportCsvToExcel('出库列表.xlsx', data)
                 } catch { message.error('导出失败') }
               }}>导出 Excel</Button>
+              <Button onClick={()=> { setSelListHeaders(outboundListFields.map(f=>f.key)); setExcelOpen('list') }}>自定义 Excel</Button>
               <Button onClick={()=>{
                 const v = form.getFieldsValue()
                 const q: any = {}
@@ -104,6 +124,7 @@ export default function OutboundsListPage() {
                   exportCsvToExcel('出库明细.xlsx', data)
                 } catch { message.error('导出失败') }
               }}>明细 Excel</Button>
+              <Button onClick={()=> { setSelDetailHeaders(outboundDetailFields.map(f=>f.key)); setExcelOpen('detail') }}>自定义明细</Button>
               <Button onClick={()=> navigate('/outbound-new')}>新建出库</Button>
             </Space>
           </Form.Item>
@@ -128,6 +149,47 @@ export default function OutboundsListPage() {
             )}
           ]}
         />
+      <Modal title={excelOpen==='list' ? '自定义出库列表导出' : '自定义出库明细导出'} open={!!excelOpen} onCancel={()=> setExcelOpen(null)} onOk={async()=>{
+        const v = form.getFieldsValue()
+        const q: any = {}
+        if (v.code) q.code = v.code
+        if (v.status) q.status = v.status
+        if (v.dateRange) { q.dateFrom = v.dateRange[0]?.format('YYYY-MM-DD'); q.dateTo = v.dateRange[1]?.format('YYYY-MM-DD') }
+        try {
+          if (excelOpen === 'list') {
+            const { data } = await api.get('/outbounds', { params: { ...q, page: 1, pageSize: 10000 } })
+            const rows = (data?.data||[]).map((r:any)=>{
+              const obj: Record<string, any> = {}
+              outboundListFields.filter(f=> selListHeaders.includes(f.key)).forEach(f=>{ obj[f.title] = r[f.key] })
+              return obj
+            })
+            exportToExcel('出库列表-自定义.xlsx', rows)
+          } else {
+            const { data: csv } = await api.get('/outbound-items.csv', { params: q, responseType: 'text' })
+            exportCsvToExcel('出库明细-自定义.xlsx', csv)
+          }
+        } catch { message.error('导出失败') } finally { setExcelOpen(null) }
+      }}>
+        {excelOpen==='list' ? (
+          <>
+            <div style={{ marginBottom: 8 }}>选择导出字段（列表）：</div>
+            <Checkbox.Group style={{ width: '100%' }} value={selListHeaders} onChange={(v)=> setSelListHeaders(v as string[])}>
+              <Space direction="vertical">
+                {outboundListFields.map(f=> <Checkbox key={f.key} value={f.key}>{f.title}</Checkbox>)}
+              </Space>
+            </Checkbox.Group>
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: 8 }}>选择导出字段（明细）：</div>
+            <Checkbox.Group style={{ width: '100%' }} value={selDetailHeaders} onChange={(v)=> setSelDetailHeaders(v as string[])}>
+              <Space direction="vertical">
+                {outboundDetailFields.map(f=> <Checkbox key={f.key} value={f.key}>{f.title}</Checkbox>)}
+              </Space>
+            </Checkbox.Group>
+          </>
+        )}
+      </Modal>
     </Space>
   )
 }

@@ -1,6 +1,21 @@
-// Optional PWA helpers (vite-plugin-pwa auto registers SW). We can listen to update events if needed.
-export function initPWA() {
+// Optional PWA helpers: register Service Worker and notify when updates are available.
+// Tip: Vite PWA provides a virtual module to register SW and expose an update function.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import { registerSW } from 'virtual:pwa-register'
+
+export function initPWA(onNeedRefresh?: (update: (reload?: boolean) => void) => void) {
   if ('serviceWorker' in navigator) {
-    // No-op for now; vite-plugin-pwa with registerType: 'autoUpdate' handles updates.
+    try {
+      const updateSW = registerSW({
+        immediate: true,
+        onNeedRefresh() {
+          onNeedRefresh?.((reload?: boolean) => updateSW(Boolean(reload)))
+        },
+        onOfflineReady() {
+          // noop
+        },
+      })
+    } catch {}
   }
 }

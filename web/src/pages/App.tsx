@@ -54,7 +54,10 @@ const items = [
 
 type AppProps = { isDark?: boolean; onToggleTheme?: () => void }
 export default function App({ isDark, onToggleTheme }: AppProps) {
-  React.useEffect(()=>{ initPWA() }, [])
+  const [updateReady, setUpdateReady] = React.useState<null | ((reload?: boolean)=>void)>(null)
+  React.useEffect(()=>{
+    initPWA((update)=> setUpdateReady(()=> update))
+  }, [])
   const loc = useLocation()
   const navigate = useNavigate()
   const { token } = theme.useToken()
@@ -190,6 +193,9 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
         <Header style={{ background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 16, gap: 12 }}>
           <Typography.Title level={4} style={{ margin: 0 }} className="app-header-title">{pageTitle}</Typography.Title>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {updateReady && (
+              <Button size="small" type="primary" onClick={()=> updateReady(true)}>有更新，点击刷新</Button>
+            )}
             <Input allowClear prefix={<SearchOutlined />} placeholder="全局搜索（物料/单号/批次）" style={{ width: 360 }} onPressEnter={(e)=>{ const kw=(e.target as HTMLInputElement).value.trim(); if(kw) navigate(`/search?q=${encodeURIComponent(kw)}`) }} />
             <Popover content={
               <div style={{ width: 360 }}>
