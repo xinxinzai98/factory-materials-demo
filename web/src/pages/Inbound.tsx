@@ -36,6 +36,11 @@ export default function InboundPage() {
       const opts = (data || []).map((s: any) => ({ value: s.name, label: `${s.code} - ${s.name}` }))
       setSuppliers(opts)
     }).catch(() => {})
+    // 加载仓库列表
+    api.get('/warehouses').then(({ data })=>{
+      const opts = (data || []).map((w:any)=> ({ value: w.code, label: `${w.code} - ${w.name||w.code}` }))
+      setWarehouses(opts)
+    }).catch(()=>{})
   }, [])
 
   const addItem = (it: Item) => {

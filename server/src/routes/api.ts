@@ -118,6 +118,28 @@ router.get('/warehouses', async (_req: Request, res: Response) => {
   res.json(rows.map(w => ({ code: w.code, name: (w as any).name || w.code, enabled: (w as any).enabled })));
 });
 
+// GET /api/locations 列表（支持按仓库过滤）
+router.get('/locations', async (req: Request, res: Response) => {
+  const warehouse = (req.query.warehouse as string | undefined)?.trim();
+  const q = (req.query.q as string | undefined)?.trim();
+  const enabled = req.query.enabled as string | undefined;
+
+  const repo = AppDataSource.getRepository(Location);
+  const qb = repo.createQueryBuilder('l').leftJoinAndSelect('l.warehouse', 'w');
+  if (warehouse) qb.andWhere('w.code = :wc', { wc: warehouse });
+  if (q) qb.andWhere('(l.code ILIKE :q OR l.zone ILIKE :q)', { q: `%${q}%` });
+  if (enabled !== undefined) qb.andWhere('l.enabled = :en', { en: enabled === 'true' });
+  qb.orderBy('w.code', 'ASC').addOrderBy('l.code','ASC');
+  const rows = await qb.getMany();
+  res.json(rows.map(l => ({
+    warehouse: l.warehouse.code,
+    code: l.code,
+    zone: (l as any).zone || null,
+    tempZone: (l as any).tempZone || null,
+    enabled: (l as any).enabled,
+  })));
+});
+
 // Suppliers
 router.get('/suppliers', async (req: Request, res: Response) => {
   const q = (req.query.q as string || '').trim();
@@ -864,13 +886,21 @@ router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res:
     }
 
     // 2) 增加入目标库存（逐批对应）
+    // 若提供 toLocation 且存在匹配库位，则将目标库存记录的 location 设为该库位
+    let targetLocId: string | undefined = undefined
+    if ((toLocation || '').trim()) {
+      const loc = await mgr.getRepository(Location).createQueryBuilder('l')
+        .where('l.warehouse_id = :wid AND l.code = :code', { wid: toWh.id, code: String(toLocation).trim() })
+        .getOne()
+      if (loc) targetLocId = loc.id
+    }
     for (const p of picked) {
       let t = await mgr.getRepository(Stock).findOne({ where: { materialId: mat.id, warehouseId: toWh.id, batchNo: p.batchNo || '' } })
       if (!t) {
         t = mgr.getRepository(Stock).create({
           materialId: mat.id,
           warehouseId: toWh.id,
-          locationId: undefined,
+          locationId: targetLocId,
           batchNo: p.batchNo || '',
           expDate: (p.expDate as any) || null,
           mfgDate: null,
@@ -879,6 +909,8 @@ router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res:
           qtyInTransit: '0',
         })
       }
+      // 如果已有库存行但之前未设置库位且本次提供库位，则补充库位信息
+      if (!t.locationId && targetLocId) t.locationId = targetLocId
       t.qtyOnHand = String(Number(t.qtyOnHand) + p.take)
       await mgr.getRepository(Stock).save(t)
     }
@@ -1341,9 +1373,22 @@ router.post('/seed/dev', async (_req: Request, res: Response) => {
   const mRepo = AppDataSource.getRepository(Material);
   const uRepo = AppDataSource.getRepository(User);
   const sRepo = AppDataSource.getRepository(Supplier);
+  const lRepo = AppDataSource.getRepository(Location);
   const nRepo = AppDataSource.getRepository(Notification);
   let wh = await whRepo.findOne({ where: { code: 'WH1' } });
   if (!wh) wh = await whRepo.save(whRepo.create({ code: 'WH1', name: '主仓' }));
+  // 默认库位
+  const ensureLocation = async (warehouseId: string, code: string, zone?: string) => {
+    let l = await lRepo.findOne({ where: { warehouseId, code } });
+    if (!l) {
+      l = lRepo.create({ warehouseId, code, zone: zone || null as any, enabled: true });
+      await lRepo.save(l);
+    }
+    return l;
+  };
+  await ensureLocation(wh.id, 'A1', 'A区');
+  await ensureLocation(wh.id, 'A2', 'A区');
+  await ensureLocation(wh.id, 'B1', 'B区');
   let m = await mRepo.findOne({ where: { code: 'M001' } });
   if (!m) m = await mRepo.save(mRepo.create({ code: 'M001', name: '示例物料', uom: 'PCS', isBatch: true, shelfLifeDays: 365 }));
   // seed users

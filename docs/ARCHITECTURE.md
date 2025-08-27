@@ -21,6 +21,7 @@
   - 日趋势：`GET /api/metrics/trends`，导出：`GET /api/metrics/trends.csv`
   - 周趋势：`GET /api/metrics/weekly`，导出：`GET /api/metrics/weekly.csv`
   - 低库存 TopN：`GET /api/metrics/low-stocks`，导出：`GET /api/metrics/low-stocks.csv`
+  - 基础主数据：仓库列表 `GET /api/warehouses`；库位列表 `GET /api/locations?warehouse=WH1&enabled=true`
 - 筛选与参数约定：
   - 通用日期：`dateFrom`、`dateTo`（YYYY-MM-DD，可任选其一）
   - 趋势：`days`（1-90，默认30）、`weeks`（1-52，默认12）、`materialCode`（精确匹配）
@@ -70,6 +71,8 @@
   - 入库单：列表/详情/草稿/审批/上架（VIEWER 仅查看；OP/ADMIN 可操作）
   - 出库单：列表/详情/草稿/审批/拣货（VIEWER 仅查看；OP/ADMIN 可操作）
   - 移库：在仓间/批次间转移库存（OP/ADMIN 可见）
+    - Transfer 页下拉：仓库来源自 `/warehouses`，库位来源自 `/locations?warehouse=...`；
+      当提交参数包含 `toLocation` 且该库位存在时，目标库存记录会设置到该库位。
   - 盘点/调整：将批次库存强制到目标量（OP/ADMIN 可见）
   - 设置：系统参数、API 基址/Key、主题切换（OP/ADMIN 可见；部分只读）
 

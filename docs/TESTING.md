@@ -25,6 +25,11 @@
 - 移库：POST /api/transfers
 - 调整：POST /api/adjustments
 
+### 仓库/库位联动冒烟
+1) 获取仓库：GET /api/warehouses 期望至少包含 WH1。
+2) 获取库位：GET /api/locations?warehouse=WH1 期望返回 A1/A2/B1 等示例库位。
+3) 前端 Transfer 页：选择来源仓库后，目标库位下拉应按所选目标仓库加载；填写 toLocation=现有库位时，移库成功后该批次的新库存行带有对应库位。
+
 ## 认证
 - 注册：POST /api/auth/register
 - 登录：POST /api/auth/login

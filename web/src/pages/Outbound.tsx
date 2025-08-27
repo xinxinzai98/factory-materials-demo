@@ -8,6 +8,7 @@ export default function OutboundPage() {
   const [form] = Form.useForm()
   const [addForm] = Form.useForm()
   const [items, setItems] = useState<Item[]>([])
+  const [warehouses, setWarehouses] = useState<{ value: string; label: string }[]>([{ value: 'WH1', label: '主仓' }])
   const [batchOpts, setBatchOpts] = useState<Array<{ value: string; label: string }>>([])
   const rowErrors = React.useMemo(()=>{
     const errs: Record<number, Record<string, string>> = {}
@@ -70,12 +71,19 @@ export default function OutboundPage() {
     }
   }
 
+  useEffect(()=>{
+    api.get('/warehouses').then(({ data })=>{
+      const opts = (data || []).map((w:any)=> ({ value: w.code, label: `${w.code} - ${w.name||w.code}` }))
+      setWarehouses(opts)
+    }).catch(()=>{})
+  },[])
+
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
     <Card className="glass-card" title="出库单">
         <Form form={form} layout="inline">
           <Form.Item name="code" rules={[{ required: true }]}><Input placeholder="出库单号" /></Form.Item>
-      <Form.Item name="warehouseCode" initialValue="WH1"><Select placeholder="仓库名称" style={{ minWidth: 140 }} options={[{value:'WH1',label:'主仓'}]} /></Form.Item>
+  <Form.Item name="warehouseCode" initialValue="WH1"><Select placeholder="仓库名称" style={{ minWidth: 140 }} options={warehouses} showSearch /></Form.Item>
           <Form.Item>
             <Space>
               <Button onClick={saveDraft} disabled={items.length===0 || hasErrors}>保存草稿</Button>
