@@ -26,12 +26,28 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/warehouses') || url.pathname.startsWith('/api/locations') || url.pathname.startsWith('/api/materials') || url.pathname.startsWith('/api/settings/thresholds'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'api-ref-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 24 * 60 * 60 },
+            },
+          },
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/inbounds') || url.pathname.startsWith('/api/outbounds') || url.pathname.startsWith('/api/stocks') || url.pathname.startsWith('/api/metrics'),
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'api-list-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 10 * 60 },
+            },
+          },
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/notifications'),
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'api-cache',
+              cacheName: 'api-notif-cache',
               networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 },
+              expiration: { maxEntries: 100, maxAgeSeconds: 10 * 60 },
             },
           },
         ],

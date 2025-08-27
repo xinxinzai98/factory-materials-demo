@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Button, DatePicker, Form, Input, Select, Space, Table, Tag, message, Modal, Checkbox } from 'antd'
+import { Button, DatePicker, Form, Input, Select, Space, Table, Tag, message, Modal, Checkbox, Input as AntInput, Divider } from 'antd'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/api/http'
 import { exportCsvToExcel, exportToExcel } from '@/utils/exportExcel'
+import { listTemplates, upsertTemplate, removeTemplate } from '@/utils/exportTemplates'
 
 export default function InboundsListPage() {
   const [rows, setRows] = useState<any[]>([])
@@ -30,6 +31,9 @@ export default function InboundsListPage() {
   ]
   const [selListHeaders, setSelListHeaders] = useState<string[]>(inboundListFields.map(f=>f.key))
   const [selDetailHeaders, setSelDetailHeaders] = useState<string[]>(inboundDetailFields.map(f=>f.key))
+  const [headerMap, setHeaderMap] = useState<Record<string,string>>({})
+  const [tplName, setTplName] = useState('')
+  const [tplList, setTplList] = useState(()=> listTemplates('inbound-detail'))
 
   const load = async (params?: any) => {
     setLoading(true)
@@ -152,7 +156,7 @@ export default function InboundsListPage() {
           ]}
         />
 
-      <Modal title={excelOpen==='list' ? '自定义入库列表导出' : '自定义入库明细导出'} open={!!excelOpen} onCancel={()=> setExcelOpen(null)} onOk={async()=>{
+  <Modal title={excelOpen==='list' ? '自定义入库列表导出' : '自定义入库明细导出'} open={!!excelOpen} onCancel={()=> setExcelOpen(null)} onOk={async()=>{
         const v = form.getFieldsValue()
         const q: any = {}
         if (v.code) q.code = v.code
@@ -170,9 +174,15 @@ export default function InboundsListPage() {
             exportToExcel('入库列表-自定义.xlsx', rows)
           } else {
             const { data } = await api.get('/inbound-items', { params: q })
+            let keys = inboundDetailFields.map(f=>f.key).filter(k=> selDetailHeaders.includes(k))
+            // 应用自定义顺序
+            keys = selDetailHeaders.filter(k=> keys.includes(k))
             const rows = (data||[]).map((r:any)=>{
               const obj: Record<string, any> = {}
-              inboundDetailFields.filter(f=> selDetailHeaders.includes(f.key)).forEach(f=>{ obj[f.title] = r[f.key] })
+              keys.forEach(k=>{
+                const title = headerMap[k] || inboundDetailFields.find(f=> f.key===k)?.title || k
+                obj[title] = r[k]
+              })
               return obj
             })
             exportToExcel('入库明细-自定义.xlsx', rows)
@@ -196,6 +206,23 @@ export default function InboundsListPage() {
                 {inboundDetailFields.map(f=> <Checkbox key={f.key} value={f.key}>{f.title}</Checkbox>)}
               </Space>
             </Checkbox.Group>
+            <Divider />
+            <div style={{ marginBottom: 8 }}>列名自定义（留空则使用默认名）：</div>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {inboundDetailFields.filter(f=> selDetailHeaders.includes(f.key)).map(f=> (
+                <div key={f.key} style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ width: 120, lineHeight: '32px' }}>{f.title}</div>
+                  <AntInput placeholder={`自定义列名（默认：${f.title}）`} value={headerMap[f.key]||''} onChange={e=> setHeaderMap(h=> ({ ...h, [f.key]: e.target.value }))} />
+                </div>
+              ))}
+            </Space>
+            <Divider />
+            <Space>
+              <AntInput placeholder="保存为方案名称" value={tplName} onChange={e=> setTplName(e.target.value)} style={{ width: 200 }} />
+              <Button onClick={()=>{ if(!tplName.trim()) { message.warning('请输入方案名称'); return } upsertTemplate('inbound-detail', tplName.trim(), selDetailHeaders, headerMap); setTplList(listTemplates('inbound-detail')); message.success('已保存导出方案') }}>保存方案</Button>
+              {tplList.length>0 && <Select placeholder="加载方案" style={{ width: 220 }} options={tplList.map(t=> ({ label: t.name, value: t.name }))} onChange={(name)=>{ const t = listTemplates('inbound-detail').find(x=> x.name===name); if(!t) return; setSelDetailHeaders(t.keys); setHeaderMap(t.headerMap||{}); }} />}
+              {tplList.length>0 && <Button danger onClick={()=>{ if(!tplName.trim()) { message.warning('请输入要删除的方案名称'); return } removeTemplate('inbound-detail', tplName.trim()); setTplList(listTemplates('inbound-detail')); message.success('已删除'); }}>删除方案</Button>}
+            </Space>
           </>
         )}
       </Modal>
