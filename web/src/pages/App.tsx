@@ -18,6 +18,7 @@ import QuestionCircleOutlined from '@ant-design/icons/QuestionCircleOutlined'
 import CrownFilled from '@ant-design/icons/CrownFilled'
 import EyeOutlined from '@ant-design/icons/EyeOutlined'
 import BarChartOutlined from '@ant-design/icons/BarChartOutlined'
+import HistoryOutlined from '@ant-design/icons/HistoryOutlined'
 import Splash from './Splash'
 import { initPWA } from '@/pwa'
 const MaterialsPage = React.lazy(()=> import('@/pages/Materials'))
@@ -36,6 +37,7 @@ const Dashboard = React.lazy(()=> import('@/pages/Dashboard'))
 const HelpPage = React.lazy(()=> import('@/pages/Help'))
 const SearchResultsPage = React.lazy(()=> import('@/pages/SearchResults'))
 const AnalyticsPage = React.lazy(()=> import('@/pages/Analytics'))
+const MovementsPage = React.lazy(()=> import('@/pages/Movements'))
 import { api, isTokenExpired } from '@/api/http'
 
 const { Header, Content, Sider } = Layout
@@ -49,6 +51,7 @@ const items = [
   { key: '/transfer', icon: <SwapOutlined />, label: <Link to="/transfer">移库</Link> },
   { key: '/adjust', icon: <ToolOutlined />, label: <Link to="/adjust">盘点</Link> },
   { key: '/analytics', icon: <BarChartOutlined />, label: <Link to="/analytics">分析/报表</Link> },
+  { key: '/movements', icon: <HistoryOutlined />, label: <Link to="/movements">库存变动</Link> },
   // 设置与帮助从侧栏移除，保留在右上角
 ]
 
@@ -135,6 +138,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
     if (pathname.startsWith('/adjust')) return '/adjust'
     if (pathname.startsWith('/dashboard')) return '/dashboard'
   if (pathname.startsWith('/analytics')) return '/analytics'
+    if (pathname.startsWith('/movements')) return '/movements'
     return ''
   })()
 
@@ -155,6 +159,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
     if (selectedKey === '/transfer') return '移库'
     if (selectedKey === '/adjust') return '盘点'
   if (selectedKey === '/analytics') return '分析/报表'
+    if (selectedKey === '/movements') return '库存变动'
     if (pathname.startsWith('/settings')) return '设置'
     if (pathname.startsWith('/help')) return '帮助'
     return '工厂物料管理系统'
@@ -249,6 +254,7 @@ export default function App({ isDark, onToggleTheme }: AppProps) {
             <Route path="/transfer" element={<TransferPage />} />
             <Route path="/adjust" element={<AdjustPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/movements" element={<MovementsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
               <Route path="/help" element={<HelpPage />} />
             {/* 未登录则仅允许访问根封面与登录页 */}

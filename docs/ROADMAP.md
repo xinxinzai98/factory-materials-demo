@@ -46,7 +46,8 @@
     - smoke:metrics 脚本增加 /health 等待，降低假失败
   - [x] 导出格式与可解析性测试：新增 export-number（数值解析）与 export-format（日期 ISO）
   - [x] Analytics 导出统一文件名：后端 metrics*.csv 支持 filename 参数；前端按时间戳命名 trends/weekly/low-stocks/compare CSV
-  - [x] 库存变动流水：新增 StockMovement 实体/迁移；在入库上架、即时入库、出库拣货、即时出库、调整、移库路径记录流水；提供 /api/movements(.csv) 查询与导出接口
+  - [x] 库存变动流水：新增 StockMovement 实体/迁移；在入库上架、即时入库、出库拣货、即时出库、调整、移库路径记录流水；提供 /api/movements(.csv) 与 /api/movements/summary(.csv)
+  - [x] 前端“库存变动”页面：筛选（日期/仓库/物料/来源类型）、流水表格、CSV 导出、日汇总简图
 
 - 验收要点
   - 文档更新到位（测试步骤可复现）
@@ -56,7 +57,7 @@
 ## 短期可选项（候选池）
 - [ ] 导出字段集统一：对齐 CSV 与 JSON 字段命名/顺序/含义（若未被本轮 Pick 完成）
 - [ ] 代码体积优化：手动 vendor 拆包与更多动态导入（React/AntD/Dayjs 等）
-- [ ] 仓库维度趋势或库存变动报表（若单据不含仓库口径，则以库存变动流水实现）
+- [ ] 仓库/物料维度的周/月汇总接口与图表（movements 的 summary 扩展）
 - [ ] 服务端导出模板预设与共享（多用户间共享模板、权限控制）
 - [ ] 通知/离线体验优化（批量操作、缓存时效 UI 提示）
  - [ ] 文档加固：

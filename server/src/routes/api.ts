@@ -298,6 +298,7 @@ router.get('/movements', async (req: Request, res: Response) => {
   const warehouse = req.query.warehouse as string | undefined
   const materialCode = req.query.materialCode as string | undefined
   const sourceType = req.query.sourceType as string | undefined
+  const limit = Math.max(1, Math.min(1000, Number((req.query.limit as any) || 500)))
 
   const repo = AppDataSource.getRepository(StockMovement)
   const qb = repo.createQueryBuilder('mv')
@@ -317,7 +318,7 @@ router.get('/movements', async (req: Request, res: Response) => {
   if (warehouse) qb.andWhere('w.code = :wc', { wc: warehouse })
   if (materialCode) qb.andWhere('m.code = :mc', { mc: materialCode })
   if (sourceType) qb.andWhere('mv.sourceType = :st', { st: sourceType })
-  const rows = await qb.orderBy('mv.createdAt','DESC').getRawMany()
+  const rows = await qb.orderBy('mv.createdAt','DESC').take(limit).getRawMany()
   res.json(rows)
 })
 
@@ -328,6 +329,7 @@ router.get('/movements.csv', async (req: Request, res: Response) => {
   const warehouse = req.query.warehouse as string | undefined
   const materialCode = req.query.materialCode as string | undefined
   const sourceType = req.query.sourceType as string | undefined
+  const limit = Math.max(1, Math.min(50000, Number((req.query.limit as any) || 10000)))
 
   const repo = AppDataSource.getRepository(StockMovement)
   const qb = repo.createQueryBuilder('mv')
@@ -347,7 +349,7 @@ router.get('/movements.csv', async (req: Request, res: Response) => {
   if (warehouse) qb.andWhere('w.code = :wc', { wc: warehouse })
   if (materialCode) qb.andWhere('m.code = :mc', { mc: materialCode })
   if (sourceType) qb.andWhere('mv.sourceType = :st', { st: sourceType })
-  const rows = await qb.orderBy('mv.createdAt','DESC').getRawMany()
+  const rows = await qb.orderBy('mv.createdAt','DESC').take(limit).getRawMany()
   const header = ['createdAt','warehouse','materialCode','batchNo','qtyChange','sourceType','sourceCode']
   const fmt = (v: any) => v instanceof Date ? v.toISOString() : v
   const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
@@ -355,6 +357,68 @@ router.get('/movements.csv', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   const fn = (req.query.filename as string | undefined) || 'movements.csv'
   res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+  res.send('\ufeff' + csv);
+})
+
+// 库存变动日汇总（按天统计 in/out/net）
+router.get('/movements/summary', async (req: Request, res: Response) => {
+  const dateFrom = req.query.dateFrom as string | undefined
+  const dateTo = req.query.dateTo as string | undefined
+  const warehouse = req.query.warehouse as string | undefined
+  const materialCode = req.query.materialCode as string | undefined
+  let cond = '1=1'
+  const params: any[] = []
+  if (dateFrom) { cond += ` AND mv.created_at >= $${params.length+1}`; params.push(new Date(dateFrom)) }
+  if (dateTo) { cond += ` AND mv.created_at <= $${params.length+1}`; params.push(new Date(dateTo)) }
+  if (warehouse) { cond += ` AND w.code = $${params.length+1}`; params.push(warehouse) }
+  if (materialCode) { cond += ` AND m.code = $${params.length+1}`; params.push(materialCode) }
+  const rows = await AppDataSource.query(
+    `SELECT to_char(date_trunc('day', mv.created_at), 'YYYY-MM-DD') AS date,
+            SUM(CASE WHEN mv.qty_change::numeric > 0 THEN mv.qty_change::numeric ELSE 0 END) AS inQty,
+            SUM(CASE WHEN mv.qty_change::numeric < 0 THEN -mv.qty_change::numeric ELSE 0 END) AS outQty,
+            SUM(mv.qty_change::numeric) AS net
+     FROM stock_movements mv
+     JOIN materials m ON m.id = mv.material_id
+     JOIN warehouses w ON w.id = mv.warehouse_id
+     WHERE ${cond}
+     GROUP BY 1
+     ORDER BY 1 ASC`,
+    params
+  )
+  res.json({ data: rows })
+})
+
+// 库存变动日汇总 CSV 导出
+router.get('/movements/summary.csv', async (req: Request, res: Response) => {
+  const dateFrom = req.query.dateFrom as string | undefined
+  const dateTo = req.query.dateTo as string | undefined
+  const warehouse = req.query.warehouse as string | undefined
+  const materialCode = req.query.materialCode as string | undefined
+  let cond = '1=1'
+  const params: any[] = []
+  if (dateFrom) { cond += ` AND mv.created_at >= $${params.length+1}`; params.push(new Date(dateFrom)) }
+  if (dateTo) { cond += ` AND mv.created_at <= $${params.length+1}`; params.push(new Date(dateTo)) }
+  if (warehouse) { cond += ` AND w.code = $${params.length+1}`; params.push(warehouse) }
+  if (materialCode) { cond += ` AND m.code = $${params.length+1}`; params.push(materialCode) }
+  const rows = await AppDataSource.query(
+    `SELECT to_char(date_trunc('day', mv.created_at), 'YYYY-MM-DD') AS date,
+            SUM(CASE WHEN mv.qty_change::numeric > 0 THEN mv.qty_change::numeric ELSE 0 END) AS inQty,
+            SUM(CASE WHEN mv.qty_change::numeric < 0 THEN -mv.qty_change::numeric ELSE 0 END) AS outQty,
+            SUM(mv.qty_change::numeric) AS net
+     FROM stock_movements mv
+     JOIN materials m ON m.id = mv.material_id
+     JOIN warehouses w ON w.id = mv.warehouse_id
+     WHERE ${cond}
+     GROUP BY 1
+     ORDER BY 1 ASC`,
+    params
+  )
+  const header = ['date','inQty','outQty','net']
+  const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"'
+  const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n')
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  const fn = (req.query.filename as string | undefined) || 'movement-summary.csv'
+  res.setHeader('Content-Disposition', `attachment; filename=\"${fn}\"`);
   res.send('\ufeff' + csv);
 })
 
