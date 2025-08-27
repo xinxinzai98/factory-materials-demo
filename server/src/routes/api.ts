@@ -18,6 +18,7 @@ import { Notification } from '../entities/Notification.js';
 import { getDashboardMetrics, getTrends as svcGetTrends, getLowStocks as svcGetLowStocks } from '../services/metrics.js';
 import bcrypt from 'bcrypt';
 // no external csv lib; build simple CSV manually
+import { StockMovement } from '../entities/StockMovement.js';
 
 const router = Router();
 
@@ -290,6 +291,73 @@ router.get('/inbounds.csv', async (req: Request, res: Response) => {
   res.send('\ufeff' + csv);
 })
 
+// 库存变动流水（JSON）
+router.get('/movements', async (req: Request, res: Response) => {
+  const dateFrom = req.query.dateFrom as string | undefined
+  const dateTo = req.query.dateTo as string | undefined
+  const warehouse = req.query.warehouse as string | undefined
+  const materialCode = req.query.materialCode as string | undefined
+  const sourceType = req.query.sourceType as string | undefined
+
+  const repo = AppDataSource.getRepository(StockMovement)
+  const qb = repo.createQueryBuilder('mv')
+    .leftJoin('mv.material','m')
+    .leftJoin('mv.warehouse','w')
+    .select([
+      'mv.createdAt AS "createdAt"',
+      'w.code AS "warehouse"',
+      'm.code AS "materialCode"',
+      'mv.batchNo AS "batchNo"',
+      'mv.qtyChange AS "qtyChange"',
+      'mv.sourceType AS "sourceType"',
+      'mv.sourceCode AS "sourceCode"',
+    ])
+  if (dateFrom) qb.andWhere('mv.createdAt >= :df', { df: new Date(dateFrom) })
+  if (dateTo) qb.andWhere('mv.createdAt <= :dt', { dt: new Date(dateTo) })
+  if (warehouse) qb.andWhere('w.code = :wc', { wc: warehouse })
+  if (materialCode) qb.andWhere('m.code = :mc', { mc: materialCode })
+  if (sourceType) qb.andWhere('mv.sourceType = :st', { st: sourceType })
+  const rows = await qb.orderBy('mv.createdAt','DESC').getRawMany()
+  res.json(rows)
+})
+
+// 库存变动流水 CSV 导出
+router.get('/movements.csv', async (req: Request, res: Response) => {
+  const dateFrom = req.query.dateFrom as string | undefined
+  const dateTo = req.query.dateTo as string | undefined
+  const warehouse = req.query.warehouse as string | undefined
+  const materialCode = req.query.materialCode as string | undefined
+  const sourceType = req.query.sourceType as string | undefined
+
+  const repo = AppDataSource.getRepository(StockMovement)
+  const qb = repo.createQueryBuilder('mv')
+    .leftJoin('mv.material','m')
+    .leftJoin('mv.warehouse','w')
+    .select([
+      'mv.createdAt AS "createdAt"',
+      'w.code AS "warehouse"',
+      'm.code AS "materialCode"',
+      'mv.batchNo AS "batchNo"',
+      'mv.qtyChange AS "qtyChange"',
+      'mv.sourceType AS "sourceType"',
+      'mv.sourceCode AS "sourceCode"',
+    ])
+  if (dateFrom) qb.andWhere('mv.createdAt >= :df', { df: new Date(dateFrom) })
+  if (dateTo) qb.andWhere('mv.createdAt <= :dt', { dt: new Date(dateTo) })
+  if (warehouse) qb.andWhere('w.code = :wc', { wc: warehouse })
+  if (materialCode) qb.andWhere('m.code = :mc', { mc: materialCode })
+  if (sourceType) qb.andWhere('mv.sourceType = :st', { st: sourceType })
+  const rows = await qb.orderBy('mv.createdAt','DESC').getRawMany()
+  const header = ['createdAt','warehouse','materialCode','batchNo','qtyChange','sourceType','sourceCode']
+  const fmt = (v: any) => v instanceof Date ? v.toISOString() : v
+  const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
+  const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n')
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  const fn = (req.query.filename as string | undefined) || 'movements.csv'
+  res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+  res.send('\ufeff' + csv);
+})
+
 // 入库明细导出 CSV（按订单筛选条件展开为行）
 router.get('/inbound-items.csv', async (req: Request, res: Response) => {
   const status = req.query.status as string | undefined;
@@ -458,9 +526,31 @@ router.post('/inbounds/:code/putaway', requireRoles('ADMIN', 'OP'), async (req: 
           qtyInTransit: '0',
           locationId: undefined,
         }))
+          // movement: inbound +qty
+          await mgr.getRepository(StockMovement).save(
+            mgr.getRepository(StockMovement).create({
+              warehouseId: wh.id,
+              materialId: it.materialId,
+              batchNo: it.batchNo || '',
+              qtyChange: String(it.qty),
+              sourceType: 'INBOUND',
+              sourceCode: order.code,
+            })
+          )
       } else {
         stock.qtyOnHand = String(Number(stock.qtyOnHand) + Number(it.qty))
         await stRepo.save(stock)
+          // movement: inbound +qty
+          await mgr.getRepository(StockMovement).save(
+            mgr.getRepository(StockMovement).create({
+              warehouseId: wh.id,
+              materialId: it.materialId,
+              batchNo: it.batchNo || '',
+              qtyChange: String(it.qty),
+              sourceType: 'INBOUND',
+              sourceCode: order.code,
+            })
+          )
       }
     }
     order.status = 'PUTAWAY'
@@ -545,6 +635,17 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
       }
       stock.qtyOnHand = String(Number(stock.qtyOnHand) + Number(it.qty))
       await mgr.getRepository(Stock).save(stock)
+      // movement: inbound +qty (即时入库)
+      await mgr.getRepository(StockMovement).save(
+        mgr.getRepository(StockMovement).create({
+          warehouseId: wh.id,
+          materialId: material.id,
+          batchNo: it.batchNo || '',
+          qtyChange: String(it.qty),
+          sourceType: 'INBOUND',
+          sourceCode: order.code,
+        })
+      )
     }
   const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
   await mgr.getRepository(Notification).save({ type: 'success', title: '入库完成', message: `入库单 ${code} 完成`, status: 'UNREAD' as any })
@@ -747,6 +848,17 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
                 if (!stock || Number(stock.qtyOnHand) < qtyToPick) throw new Error('insufficient stock for batch')
                 stock.qtyOnHand = String(Number(stock.qtyOnHand) - qtyToPick)
                 await stRepo.save(stock)
+                // movement: outbound -qty
+                await mgr.getRepository(StockMovement).save(
+                  mgr.getRepository(StockMovement).create({
+                    warehouseId: wh.id,
+                    materialId: it.materialId,
+                    batchNo: it.batchNo || '',
+                    qtyChange: String(-qtyToPick),
+                    sourceType: 'OUTBOUND',
+                    sourceCode: order.code,
+                  })
+                )
               } else {
                 const stocks = await stRepo.createQueryBuilder('s')
                   .where('s.material_id = :mid AND s.warehouse_id = :wid AND s.qty_on_hand > 0', { mid: it.materialId, wid: wh.id })
@@ -759,6 +871,17 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
                   if (take > 0) {
                     s.qtyOnHand = String(Number(s.qtyOnHand) - take)
                     await stRepo.save(s)
+                    // movement: outbound -take per batch
+                    await mgr.getRepository(StockMovement).save(
+                      mgr.getRepository(StockMovement).create({
+                        warehouseId: wh.id,
+                        materialId: it.materialId,
+                        batchNo: s.batchNo || '',
+                        qtyChange: String(-take),
+                        sourceType: 'OUTBOUND',
+                        sourceCode: order.code,
+                      })
+                    )
                     qtyToPick -= take
                   }
                 }
@@ -832,6 +955,19 @@ router.post('/adjustments', requireRoles('ADMIN', 'OP'), async (req: Request, re
       reason: reason || null,
     })
     await mgr.getRepository(Adjustment).save(adj)
+    // movement: adjustment delta (+/-)
+    if (delta !== 0) {
+      await mgr.getRepository(StockMovement).save(
+        mgr.getRepository(StockMovement).create({
+          warehouseId: wh.id,
+          materialId: mat.id,
+          batchNo: batchNo || '',
+          qtyChange: String(delta),
+          sourceType: 'ADJUST',
+          sourceCode: (adj as any).id || null,
+        })
+      )
+    }
   await recalcAlerts(mgr)
   res.status(201).json(adj)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
@@ -868,6 +1004,17 @@ router.post('/outbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res:
         stock.qtyOnHand = String(Number(stock.qtyOnHand) - qtyToPick);
         await mgr.getRepository(Stock).save(stock);
         picked.push({ stockId: stock.id, qty: qtyToPick });
+        // movement: outbound -qty (即时出库 指定批次)
+        await mgr.getRepository(StockMovement).save(
+          mgr.getRepository(StockMovement).create({
+            warehouseId: wh.id,
+            materialId: material.id,
+            batchNo: it.batchNo || '',
+            qtyChange: String(-qtyToPick),
+            sourceType: 'OUTBOUND',
+            sourceCode: order.code,
+          })
+        )
       } else {
         const stocks = await mgr.getRepository(Stock)
           .createQueryBuilder('s')
@@ -883,6 +1030,17 @@ router.post('/outbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res:
             await mgr.getRepository(Stock).save(s);
             picked.push({ stockId: s.id, qty: take });
             qtyToPick -= take;
+            // movement: outbound -take per batch (即时出库 FEFO)
+            await mgr.getRepository(StockMovement).save(
+              mgr.getRepository(StockMovement).create({
+                warehouseId: wh.id,
+                materialId: material.id,
+                batchNo: s.batchNo || '',
+                qtyChange: String(-take),
+                sourceType: 'OUTBOUND',
+                sourceCode: order.code,
+              })
+            )
           }
         }
         if (qtyToPick > 0) throw new Error('insufficient stock');
@@ -929,6 +1087,17 @@ router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res:
       s.qtyOnHand = String(Number(s.qtyOnHand) - remaining)
       await mgr.getRepository(Stock).save(s)
       picked.push({ id: s.id, take: remaining, batchNo: s.batchNo, expDate: s.expDate as any })
+      // movement: transfer source -remaining
+      await mgr.getRepository(StockMovement).save(
+        mgr.getRepository(StockMovement).create({
+          warehouseId: fromWh.id,
+          materialId: mat.id,
+          batchNo: s.batchNo || '',
+          qtyChange: String(-remaining),
+          sourceType: 'TRANSFER',
+          sourceCode: null,
+        })
+      )
       remaining = 0
     } else {
       const rows = await mgr.getRepository(Stock)
@@ -944,6 +1113,17 @@ router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res:
           s.qtyOnHand = String(Number(s.qtyOnHand) - take)
           await mgr.getRepository(Stock).save(s)
           picked.push({ id: s.id, take, batchNo: s.batchNo, expDate: s.expDate as any })
+          // movement: transfer source -take
+          await mgr.getRepository(StockMovement).save(
+            mgr.getRepository(StockMovement).create({
+              warehouseId: fromWh.id,
+              materialId: mat.id,
+              batchNo: s.batchNo || '',
+              qtyChange: String(-take),
+              sourceType: 'TRANSFER',
+              sourceCode: null,
+            })
+          )
           remaining -= take
         }
       }
@@ -978,6 +1158,17 @@ router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res:
       if (!t.locationId && targetLocId) t.locationId = targetLocId
       t.qtyOnHand = String(Number(t.qtyOnHand) + p.take)
       await mgr.getRepository(Stock).save(t)
+      // movement: transfer target +take
+      await mgr.getRepository(StockMovement).save(
+        mgr.getRepository(StockMovement).create({
+          warehouseId: toWh.id,
+          materialId: mat.id,
+          batchNo: p.batchNo || '',
+          qtyChange: String(p.take),
+          sourceType: 'TRANSFER',
+          sourceCode: null,
+        })
+      )
     }
 
   await recalcAlerts(mgr)

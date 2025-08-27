@@ -46,6 +46,7 @@
     - smoke:metrics 脚本增加 /health 等待，降低假失败
   - [x] 导出格式与可解析性测试：新增 export-number（数值解析）与 export-format（日期 ISO）
   - [x] Analytics 导出统一文件名：后端 metrics*.csv 支持 filename 参数；前端按时间戳命名 trends/weekly/low-stocks/compare CSV
+  - [x] 库存变动流水：新增 StockMovement 实体/迁移；在入库上架、即时入库、出库拣货、即时出库、调整、移库路径记录流水；提供 /api/movements(.csv) 查询与导出接口
 
 - 验收要点
   - 文档更新到位（测试步骤可复现）

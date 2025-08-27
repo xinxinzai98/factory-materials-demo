@@ -5,6 +5,7 @@ import { Material } from './entities/Material.js';
 import { Warehouse } from './entities/Warehouse.js';
 import { Location } from './entities/Location.js';
 import { Stock } from './entities/Stock.js';
+import { StockMovement } from './entities/StockMovement.js';
 import { InboundOrder } from './entities/InboundOrder.js';
 import { InboundItem } from './entities/InboundItem.js';
 import { OutboundOrder } from './entities/OutboundOrder.js';
@@ -29,6 +30,6 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_NAME || 'materials',
   synchronize: sync,
   logging: false,
-  entities: [Material, Warehouse, Location, Stock, InboundOrder, InboundItem, OutboundOrder, OutboundItem, User, Adjustment, Supplier, Notification],
+  entities: [Material, Warehouse, Location, Stock, StockMovement, InboundOrder, InboundItem, OutboundOrder, OutboundItem, User, Adjustment, Supplier, Notification],
   migrations: [migrationsGlob],
 });

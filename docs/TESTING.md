@@ -24,6 +24,13 @@
 - 库存：GET /api/stocks?materialCode=&warehouse=&batchNo=
 - 移库：POST /api/transfers
 - 调整：POST /api/adjustments
+ - 库存变动流水：
+	 - 查询(JSON)：GET /api/movements?dateFrom=&dateTo=&warehouse=&materialCode=&sourceType=
+	 - 导出(CSV)：GET /api/movements.csv?dateFrom=&dateTo=&warehouse=&materialCode=&sourceType=&filename=movements-YYYYMMDD.csv
+	 - 说明：
+		 - createdAt 为 ISO8601
+		 - qtyChange 为正表示入账，为负表示扣减
+		 - sourceType 取值 INBOUND/OUTBOUND/ADJUST/TRANSFER
 
 ### 仓库/库位联动冒烟
 1) 获取仓库：GET /api/warehouses 期望至少包含 WH1。
