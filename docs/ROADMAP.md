@@ -51,6 +51,7 @@
   - [x] 汇总能力增强：/api/movements/summary(.csv) 支持 period=day|week|month 与 groupBy=warehouse|material；前端新增筛选与导出参数
   - [x] PWA 运行时缓存包含 /api/movements 列表与汇总（SWR 策略）
   - [x] Analytics 快捷导出（入/出库/明细）统一时间戳文件名，并通过 filename 参数透传
+  - [x] 共享导出模板接入前端：入/出库“自定义 Excel/明细”弹窗支持共享模板的加载/保存/重命名/删除与合并到本地（ADMIN/OP 可写）
 
 - 验收要点
   - 文档更新到位（测试步骤可复现）
@@ -61,7 +62,7 @@
 - [ ] 导出字段集统一：对齐 CSV 与 JSON 字段命名/顺序/含义（若未被本轮 Pick 完成）
 - [ ] 代码体积优化：手动 vendor 拆包与更多动态导入（React/AntD/Dayjs 等）
 - [ ] Movements 进一步分析图表：按周/月与按仓库/物料的对比柱状/堆叠图（基于已提供的 period/groupBy）
-- [ ] 服务端导出模板预设与共享（多用户间共享模板、权限控制）
+- [ ] 服务端导出模板预设（内置默认方案）与共享维护脚本（批量导入示例模板）
 - [ ] 通知/离线体验优化（批量操作、缓存时效 UI 提示）
  - [ ] 文档加固：
    - ARCHITECTURE/TESTING 增加“CSV/JSON 字段映射与格式约定”章节（日期/数值）

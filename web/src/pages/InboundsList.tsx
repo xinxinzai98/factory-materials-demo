@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/api/http'
 import { exportCsvToExcel, exportToExcel } from '@/utils/exportExcel'
 import { tsSuffix } from '@/utils/time'
-import { listTemplates, upsertTemplate, removeTemplate, renameTemplate } from '@/utils/exportTemplates'
+import { listTemplates, upsertTemplate, removeTemplate, renameTemplate, listRemoteTemplates, upsertRemoteTemplate, removeRemoteTemplate, renameRemoteTemplate, mergeLocalWithRemote } from '@/utils/exportTemplates'
 
 export default function InboundsListPage() {
   const [rows, setRows] = useState<any[]>([])
@@ -39,6 +39,20 @@ export default function InboundsListPage() {
   const [tplName, setTplName] = useState('')
   const [tplListList, setTplListList] = useState(()=> listTemplates('inbound-list'))
   const [tplList, setTplList] = useState(()=> listTemplates('inbound-detail'))
+  // 共享模板（服务端）
+  const role = (localStorage.getItem('role') || 'VIEWER') as 'ADMIN'|'OP'|'VIEWER'
+  const canWriteShared = role==='ADMIN' || role==='OP'
+  const [rTplListList, setRTplListList] = useState<Array<{ name: string; keys: string[]; headerMap?: Record<string,string> }>>([])
+  const [rTplList, setRTplList] = useState<Array<{ name: string; keys: string[]; headerMap?: Record<string,string> }>>([])
+  const refreshRemote = async ()=> {
+    try {
+      const [a,b] = await Promise.all([
+        listRemoteTemplates('inbound-list'),
+        listRemoteTemplates('inbound-detail'),
+      ])
+      setRTplListList(a||[]); setRTplList(b||[])
+    } catch {}
+  }
 
   const load = async (params?: any) => {
     setLoading(true)
@@ -49,7 +63,7 @@ export default function InboundsListPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); void refreshRemote() }, [])
   const navigate = useNavigate()
 
 
@@ -243,6 +257,13 @@ export default function InboundsListPage() {
               {tplListList.length>0 && <Button onClick={()=>{ const t = listTemplates('inbound-list').find(x=> x.name===tplNameList.trim()); if(!t) { message.warning('请先选择或输入方案名称'); return } const nn = prompt('重命名为：', t.name); if(!nn) return; renameTemplate('inbound-list', t.name, nn.trim()); setTplNameList(nn.trim()); setTplListList(listTemplates('inbound-list')); message.success('已重命名'); }}>重命名</Button>}
               {tplListList.length>0 && <Button onClick={()=>{ const t = listTemplates('inbound-list').find(x=> x.name===tplNameList.trim()); if(!t) { message.warning('请先选择或输入方案名称'); return } const preview = (t.keys||[]).map(k=> headerMapList[k] || inboundListFields.find(f=> f.key===k)?.title || k).join(' , '); Modal.info({ title: '列头预览', content: <div style={{whiteSpace:'pre-wrap'}}>{preview}</div> }) }}>预览列头</Button>}
               {tplListList.length>0 && <Button danger onClick={()=>{ if(!tplNameList.trim()) { message.warning('请输入要删除的方案名称'); return } removeTemplate('inbound-list', tplNameList.trim()); setTplListList(listTemplates('inbound-list')); message.success('已删除'); }}>删除方案</Button>}
+              {/* 共享模板（列表） */}
+              <Divider type="vertical" />
+              <Select placeholder="加载共享方案" style={{ width: 220 }} options={rTplListList.map(t=> ({ label: t.name, value: t.name }))} onDropdownVisibleChange={(open)=>{ if(open) void refreshRemote() }} onChange={(name)=>{ const t = rTplListList.find(x=> x.name===name); if(!t) return; setTplNameList(name); setSelListHeaders(t.keys||[]); setHeaderMapList(t.headerMap||{}); }} />
+              {canWriteShared && <Button onClick={async()=>{ if(!tplNameList.trim()) { message.warning('请输入方案名称'); return } try { await upsertRemoteTemplate('inbound-list', tplNameList.trim(), selListHeaders, headerMapList); await refreshRemote(); message.success('已保存到共享'); } catch { message.error('保存共享失败') } }}>保存为共享</Button>}
+              {canWriteShared && rTplListList.length>0 && <Button onClick={async()=>{ const name = tplNameList.trim(); if(!name) { message.warning('请输入/选择方案名称'); return } try { const nn = prompt('共享方案重命名为：', name); if(!nn) return; await renameRemoteTemplate('inbound-list', name, nn.trim()); setTplNameList(nn.trim()); await refreshRemote(); message.success('已重命名'); } catch { message.error('重命名失败') } }}>共享重命名</Button>}
+              {canWriteShared && rTplListList.length>0 && <Button danger onClick={async()=>{ const name = tplNameList.trim(); if(!name) { message.warning('请输入要删除的方案名称'); return } try { await removeRemoteTemplate('inbound-list', name); await refreshRemote(); message.success('已删除共享方案') } catch { message.error('删除失败') } }}>删除共享</Button>}
+              <Button onClick={async()=>{ await mergeLocalWithRemote('inbound-list'); setTplListList(listTemplates('inbound-list')); message.success('已将共享合并到本地'); }}>合并到本地</Button>
             </Space>
           </>
         ) : (
@@ -289,6 +310,13 @@ export default function InboundsListPage() {
               {tplList.length>0 && <Button onClick={()=>{ const t = listTemplates('inbound-detail').find(x=> x.name===tplName.trim()); if(!t) { message.warning('请先选择或输入方案名称'); return } const nn = prompt('重命名为：', t.name); if(!nn) return; renameTemplate('inbound-detail', t.name, nn.trim()); setTplName(nn.trim()); setTplList(listTemplates('inbound-detail')); message.success('已重命名'); }}>重命名</Button>}
               {tplList.length>0 && <Button onClick={()=>{ const t = listTemplates('inbound-detail').find(x=> x.name===tplName.trim()); if(!t) { message.warning('请先选择或输入方案名称'); return } const preview = (t.keys||[]).map(k=> headerMap[k] || inboundDetailFields.find(f=> f.key===k)?.title || k).join(' , '); Modal.info({ title: '列头预览', content: <div style={{whiteSpace:'pre-wrap'}}>{preview}</div> }) }}>预览列头</Button>}
               {tplList.length>0 && <Button danger onClick={()=>{ if(!tplName.trim()) { message.warning('请输入要删除的方案名称'); return } removeTemplate('inbound-detail', tplName.trim()); setTplList(listTemplates('inbound-detail')); message.success('已删除'); }}>删除方案</Button>}
+              {/* 共享模板（明细） */}
+              <Divider type="vertical" />
+              <Select placeholder="加载共享方案" style={{ width: 220 }} options={rTplList.map(t=> ({ label: t.name, value: t.name }))} onDropdownVisibleChange={(open)=>{ if(open) void refreshRemote() }} onChange={(name)=>{ const t = rTplList.find(x=> x.name===name); if(!t) return; setTplName(name); setSelDetailHeaders(t.keys||[]); setHeaderMap(t.headerMap||{}); }} />
+              {canWriteShared && <Button onClick={async()=>{ if(!tplName.trim()) { message.warning('请输入方案名称'); return } try { await upsertRemoteTemplate('inbound-detail', tplName.trim(), selDetailHeaders, headerMap); await refreshRemote(); message.success('已保存到共享'); } catch { message.error('保存共享失败') } }}>保存为共享</Button>}
+              {canWriteShared && rTplList.length>0 && <Button onClick={async()=>{ const name = tplName.trim(); if(!name) { message.warning('请输入/选择方案名称'); return } try { const nn = prompt('共享方案重命名为：', name); if(!nn) return; await renameRemoteTemplate('inbound-detail', name, nn.trim()); setTplName(nn.trim()); await refreshRemote(); message.success('已重命名'); } catch { message.error('重命名失败') } }}>共享重命名</Button>}
+              {canWriteShared && rTplList.length>0 && <Button danger onClick={async()=>{ const name = tplName.trim(); if(!name) { message.warning('请输入要删除的方案名称'); return } try { await removeRemoteTemplate('inbound-detail', name); await refreshRemote(); message.success('已删除共享方案') } catch { message.error('删除失败') } }}>删除共享</Button>}
+              <Button onClick={async()=>{ await mergeLocalWithRemote('inbound-detail'); setTplList(listTemplates('inbound-detail')); message.success('已将共享合并到本地'); }}>合并到本地</Button>
             </Space>
           </>
         )}
