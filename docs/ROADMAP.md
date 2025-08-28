@@ -48,6 +48,9 @@
   - [x] Analytics 导出统一文件名：后端 metrics*.csv 支持 filename 参数；前端按时间戳命名 trends/weekly/low-stocks/compare CSV
   - [x] 库存变动流水：新增 StockMovement 实体/迁移；在入库上架、即时入库、出库拣货、即时出库、调整、移库路径记录流水；提供 /api/movements(.csv) 与 /api/movements/summary(.csv)
   - [x] 前端“库存变动”页面：筛选（日期/仓库/物料/来源类型）、流水表格、CSV 导出、日汇总简图
+  - [x] 汇总能力增强：/api/movements/summary(.csv) 支持 period=day|week|month 与 groupBy=warehouse|material；前端新增筛选与导出参数
+  - [x] PWA 运行时缓存包含 /api/movements 列表与汇总（SWR 策略）
+  - [x] Analytics 快捷导出（入/出库/明细）统一时间戳文件名，并通过 filename 参数透传
 
 - 验收要点
   - 文档更新到位（测试步骤可复现）
@@ -57,7 +60,7 @@
 ## 短期可选项（候选池）
 - [ ] 导出字段集统一：对齐 CSV 与 JSON 字段命名/顺序/含义（若未被本轮 Pick 完成）
 - [ ] 代码体积优化：手动 vendor 拆包与更多动态导入（React/AntD/Dayjs 等）
-- [ ] 仓库/物料维度的周/月汇总接口与图表（movements 的 summary 扩展）
+- [ ] Movements 进一步分析图表：按周/月与按仓库/物料的对比柱状/堆叠图（基于已提供的 period/groupBy）
 - [ ] 服务端导出模板预设与共享（多用户间共享模板、权限控制）
 - [ ] 通知/离线体验优化（批量操作、缓存时效 UI 提示）
  - [ ] 文档加固：
