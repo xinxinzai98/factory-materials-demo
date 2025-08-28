@@ -10,8 +10,8 @@ aSYNC: for (const s of SCOPES) {
   const url = `${API}/export-templates?scope=${encodeURIComponent(s)}`
   const res = await fetch(url, { headers: { 'X-API-Key': API_KEY } })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} - ${url}`)
-  const list = await res.json()
-  for (const t of (list||[])) {
+  const list = await res.json() as any[]
+  for (const t of (Array.isArray(list)? list : [])) {
     process.stdout.write(JSON.stringify({ scope: s, ...t }) + '\n')
   }
 }
