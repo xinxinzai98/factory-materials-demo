@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { ConfigProvider, App as AntApp, theme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import dayjs from 'dayjs'
+import 'dayjs/locale/zh-cn'
 import { BrowserRouter } from 'react-router-dom'
 import App from './pages/App'
 import 'antd/dist/reset.css'
@@ -27,7 +29,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           el.classList.toggle('theme-light', !isDark)
           el.setAttribute('data-theme', isDark ? 'dark' : 'light')
         }, [isDark])
-        return (
+  dayjs.locale('zh-cn')
+  return (
           <ConfigProvider locale={zhCN} theme={{ algorithm, token: tokens }}>
             <AntApp>
               <BrowserRouter>

@@ -448,6 +448,69 @@ router.get('/movements/summary.csv', async (req: Request, res: Response) => {
   res.send('\ufeff' + csv);
 })
 
+// ------------------- 共享导出模板（基于 app_settings） -------------------
+type ExportTemplate = { name: string; keys: string[]; headerMap?: Record<string, string>; shared?: boolean; updatedAt?: string }
+
+async function readTemplates(scope: string) {
+  const key = `exportTemplates:${scope}`
+  const rows = await AppDataSource.query('SELECT v FROM app_settings WHERE k = $1', [key])
+  if (!rows?.length) return [] as ExportTemplate[]
+  const v = rows[0]?.v
+  if (!v) return []
+  return (v.templates || v || []) as ExportTemplate[]
+}
+async function writeTemplates(scope: string, list: ExportTemplate[]) {
+  const key = `exportTemplates:${scope}`
+  const v = { templates: list, _ts: new Date().toISOString() }
+  await AppDataSource.query(`INSERT INTO app_settings(k, v) VALUES($1, $2::jsonb)
+    ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v, "updatedAt" = NOW()`, [key, JSON.stringify(v)])
+}
+
+// 列出共享模板（所有已登录角色可读）
+router.get('/export-templates', async (req: Request, res: Response) => {
+  const scope = (req.query.scope as string || '').trim()
+  if (!scope) return res.status(400).json({ message: 'scope required' })
+  const list = await readTemplates(scope)
+  res.json(list)
+})
+
+// 新增/更新模板（ADMIN/OP）
+router.post('/export-templates', requireRoles('ADMIN','OP'), async (req: Request, res: Response) => {
+  const { scope, name, keys, headerMap } = req.body || {}
+  if (!scope || !name || !Array.isArray(keys)) return res.status(400).json({ message: 'scope/name/keys required' })
+  if (String(scope).length > 64 || String(name).length > 64) return res.status(400).json({ message: 'scope/name too long' })
+  if (keys.length > 200) return res.status(400).json({ message: 'too many keys' })
+  const list = await readTemplates(scope)
+  const now = new Date().toISOString()
+  const idx = list.findIndex(t => t.name === name)
+  const item: ExportTemplate = { name, keys, headerMap: headerMap||{}, shared: true, updatedAt: now }
+  if (idx >= 0) list[idx] = item; else list.push(item)
+  await writeTemplates(scope, list)
+  res.json({ ok: true })
+})
+
+// 删除模板（ADMIN/OP）
+router.delete('/export-templates', requireRoles('ADMIN','OP'), async (req: Request, res: Response) => {
+  const { scope, name } = req.body || {}
+  if (!scope || !name) return res.status(400).json({ message: 'scope/name required' })
+  const list = (await readTemplates(scope)).filter(t => t.name !== name)
+  await writeTemplates(scope, list)
+  res.json({ ok: true })
+})
+
+// 重命名模板（ADMIN/OP）
+router.put('/export-templates/rename', requireRoles('ADMIN','OP'), async (req: Request, res: Response) => {
+  const { scope, name, newName } = req.body || {}
+  if (!scope || !name || !newName) return res.status(400).json({ message: 'scope/name/newName required' })
+  const list = await readTemplates(scope)
+  const idx = list.findIndex(t => t.name === name)
+  if (idx < 0) return res.status(404).json({ message: 'not found' })
+  list[idx].name = newName
+  list[idx].updatedAt = new Date().toISOString()
+  await writeTemplates(scope, list)
+  res.json({ ok: true })
+})
+
 // 入库明细导出 CSV（按订单筛选条件展开为行）
 router.get('/inbound-items.csv', async (req: Request, res: Response) => {
   const status = req.query.status as string | undefined;

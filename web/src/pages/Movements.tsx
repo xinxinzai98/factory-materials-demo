@@ -113,7 +113,7 @@ export default function MovementsPage() {
         </Space>
       </Card>
 
-  <Card size="small" title="汇总（in/out/net）" style={{ marginBottom: 12 }} extra={<span style={{ opacity:.65, fontSize:12 }}>{groupBy? '按维度汇总（图表/表格）' : '折线图展示'}</span>}>
+  <Card size="small" title="汇总（in/out/net）" style={{ marginBottom: 12 }} extra={<span style={{ opacity:.65, fontSize:12 }}>{groupBy? '按维度汇总（堆叠/表格）' : '折线图展示'}</span>}>
         {summary?.length && !groupBy ? (
           <div style={{ height: 220, position: 'relative' }}>
             {(() => {
@@ -142,6 +142,41 @@ export default function MovementsPage() {
           </div>
         ) : summary?.length && groupBy ? (
           <div>
+            {/* 时间轴堆叠柱：取每期内 Top5 维度，绘制 in/out 双向堆叠（简化为正值堆叠展示） */}
+            {(() => {
+              // 生成：period -> dim -> {in,out}
+              const dimKey = (r:any)=> (groupBy==='warehouse'? r.warehouse : r.materialCode) || '—'
+              const periodKeys = Array.from(new Set((summary as any[]).map(r=> r.date)))
+              const dims = Array.from(new Set((summary as any[]).map(dimKey)))
+              const color = (i:number)=> ['#0ea5e9','#22c55e','#f97316','#8b5cf6','#e11d48'][i%5]
+              const W=640, H=200, L=30, B=28, step = (W - L*2) / Math.max(1, periodKeys.length)
+              const groups = periodKeys.map(pk => {
+                const rows = (summary as any[]).filter(r=> r.date===pk).map(r=> ({ dim: dimKey(r), in: Number(r.inQty||0), out: Number(r.outQty||0) }))
+                rows.sort((a,b)=> (b.in+b.out)-(a.in+b.out))
+                return { period: pk, rows: rows.slice(0,5) }
+              })
+              const max = Math.max(1, ...groups.flatMap(g=> g.rows.map(r=> r.in + r.out)))
+              const y = (v:number)=> (H - B) - (v/max) * (H - B - 16)
+              return (
+                <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ marginBottom: 8 }}>
+                  {groups.map((g, gi)=> {
+                    let acc = 0
+                    return (
+                      <g key={g.period}>
+                        <text x={L + gi*step + step*0.1} y={H-6} fontSize={11} fill="#555">{String(g.period).slice(5)}</text>
+                        {g.rows.map((r, ri)=> {
+                          const h = Math.max(2, ((r.in + r.out) / max) * (H - B - 16))
+                          const x = L + gi*step + step*0.25
+                          const yTop = (H - B - acc) - h
+                          acc += h
+                          return <rect key={ri} x={x} y={yTop} width={step*0.5} height={h} fill={color(dims.indexOf(r.dim))} opacity={0.9} />
+                        })}
+                      </g>
+                    )
+                  })}
+                </svg>
+              )
+            })()}
             {/* 对比柱状图：按维度汇总 period 区间内的总量 */}
             {(() => {
               const agg = new Map<string, { in: number; out: number; net: number }>()
