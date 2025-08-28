@@ -13,6 +13,7 @@
   "test:export-format": "tsx src/scripts/export-format.ts",
   "test:export-number": "tsx src/scripts/export-number-format.ts",
   "test:export-metrics": "tsx src/scripts/export-metrics-format.ts",
+  "test:export-movements": "tsx src/scripts/export-movements-format.ts",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts",
     "migration:run": "npm run build && node ./node_modules/typeorm/cli.js migration:run -d dist/data-source.js",
     "migration:revert": "npm run build && node ./node_modules/typeorm/cli.js migration:revert -d dist/data-source.js"
