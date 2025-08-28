@@ -109,3 +109,8 @@
 3) 打开“加载共享方案”下拉，应能看到刚保存的方案；选择后应填充勾选项与自定义列名。
 4) 可点击“共享重命名”“删除共享”进行维护；点击“合并到本地”将远端方案同步至本地模板列表。
 5) 命令行验证 API：`npm run smoke:export-templates`（服务器需运行），应输出 OK。
+
+附：批量备份/迁移与默认回落
+- 备份：`API_KEY=dev-api-key npm run dump:export-templates > templates.ndjson`
+- 迁移：`API_KEY=dev-api-key npm run load:export-templates < templates.ndjson`
+- 默认回落：当某作用域下尚未写入任何共享模板时，`GET /api/export-templates?scope=...` 会返回内置“标准列表/标准明细”模板，仅作为只读回落（不会写入数据库）。

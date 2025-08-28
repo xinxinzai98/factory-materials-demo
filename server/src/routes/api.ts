@@ -451,13 +451,32 @@ router.get('/movements/summary.csv', async (req: Request, res: Response) => {
 // ------------------- 共享导出模板（基于 app_settings） -------------------
 type ExportTemplate = { name: string; keys: string[]; headerMap?: Record<string, string>; shared?: boolean; updatedAt?: string }
 
+// 内置默认模板（仅作为回落，当 app_settings 尚未写入任何共享模板时返回）
+const DEFAULT_EXPORT_TEMPLATES: Record<string, ExportTemplate[]> = {
+  'inbound-list': [
+    { name: '标准列表', keys: ['code','sourceType','supplier','status','createdAt'], headerMap: { code:'单号', sourceType:'来源', supplier:'供应商', status:'状态', createdAt:'创建时间' }, shared: true },
+  ],
+  'inbound-detail': [
+    { name: '标准明细', keys: ['code','status','createdAt','sourceType','supplier','materialCode','qty','batchNo','expDate'], headerMap: { code:'单号', status:'状态', createdAt:'创建时间', sourceType:'来源', supplier:'供应商', materialCode:'物料', qty:'数量', batchNo:'批次', expDate:'到期' }, shared: true },
+  ],
+  'outbound-list': [
+    { name: '标准列表', keys: ['code','purpose','status','createdAt'], headerMap: { code:'单号', purpose:'用途', status:'状态', createdAt:'创建时间' }, shared: true },
+  ],
+  'outbound-detail': [
+    { name: '标准明细', keys: ['code','status','createdAt','purpose','materialCode','qty','batchPolicy','batchNo'], headerMap: { code:'单号', status:'状态', createdAt:'创建时间', purpose:'用途', materialCode:'物料', qty:'数量', batchPolicy:'批次策略', batchNo:'批次' }, shared: true },
+  ],
+}
+
 async function readTemplates(scope: string) {
   const key = `exportTemplates:${scope}`
   const rows = await AppDataSource.query('SELECT v FROM app_settings WHERE k = $1', [key])
-  if (!rows?.length) return [] as ExportTemplate[]
+  if (!rows?.length) {
+    return DEFAULT_EXPORT_TEMPLATES[scope] ? DEFAULT_EXPORT_TEMPLATES[scope] : []
+  }
   const v = rows[0]?.v
-  if (!v) return []
-  return (v.templates || v || []) as ExportTemplate[]
+  const list = (v?.templates || v || []) as ExportTemplate[]
+  if (Array.isArray(list) && list.length > 0) return list
+  return DEFAULT_EXPORT_TEMPLATES[scope] ? DEFAULT_EXPORT_TEMPLATES[scope] : []
 }
 async function writeTemplates(scope: string, list: ExportTemplate[]) {
   const key = `exportTemplates:${scope}`

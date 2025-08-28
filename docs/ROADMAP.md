@@ -54,6 +54,8 @@
   - [x] 共享导出模板接入前端：入/出库“自定义 Excel/明细”弹窗支持共享模板的加载/保存/重命名/删除与合并到本地（ADMIN/OP 可写）
   - [x] 共享模板预设脚本：新增 `seed:export-templates`，一键写入“标准列表/标准明细”等示例方案（四个作用域）
   - [x] Movements 折线图交互增强：支持 In/Out/Net 线显隐开关与鼠标悬停提示
+  - [x] 共享模板默认回落：当 app_settings 尚无记录时，按作用域返回内置“标准列表/明细”只读模板
+  - [x] 模板批量工具：`dump:export-templates`/`load:export-templates` 用于备份与迁移（NDJSON）
 
 - 验收要点
   - 文档更新到位（测试步骤可复现）
@@ -65,6 +67,7 @@
 - [ ] 代码体积优化：手动 vendor 拆包与更多动态导入（React/AntD/Dayjs 等）
 - [ ] Movements 进一步分析图表：按周/月与按仓库/物料的对比柱状/堆叠图（基于已提供的 period/groupBy）
 - [ ] 服务端导出模板预设（内置默认方案）与共享维护脚本（批量导入示例模板）
+  已完成：默认方案只读回落、dump/load 工具与 seed 脚本
 - [ ] 通知/离线体验优化（批量操作、缓存时效 UI 提示）
  - [ ] 文档加固：
    - ARCHITECTURE/TESTING 增加“CSV/JSON 字段映射与格式约定”章节（日期/数值）
