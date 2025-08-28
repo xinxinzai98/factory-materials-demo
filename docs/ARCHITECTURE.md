@@ -108,6 +108,10 @@
 
 对照示例（入库明细 CSV/JSON 对齐关键字段）：code、status、createdAt、sourceType、supplier、materialCode、qty、batchNo、expDate。
 
+兼容建议（Excel/BI）：
+- Excel：推荐直接导出 XLSX（前端 JSON→XLSX），避免 CSV 在地区设置下的日期/小数解析误差；若使用 CSV，建议设置列类型并指定日期格式。
+- BI 工具（如 Power BI/Tableau）：导入时将日期列识别为日期/时间，数量列设为数值（浮点），编码类文本列设为文本，避免自动转数值导致前导零丢失。
+
 ## 构建与拆包策略（前端）
 - 路由级懒加载：所有页面以 `React.lazy` 按路由拆分，减少首屏体积。
 - 手动 vendor 分包（见 `web/vite.config.ts` → `manualChunks`）：

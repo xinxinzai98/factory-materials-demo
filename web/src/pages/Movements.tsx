@@ -25,6 +25,11 @@ export default function MovementsPage() {
   const [summary, setSummary] = React.useState<Array<any>>([])
   const [period, setPeriod] = React.useState<'day'|'week'|'month'>('day')
   const [groupBy, setGroupBy] = React.useState<''|'warehouse'|'material'>('')
+  // 图例显隐
+  const [showIn, setShowIn] = React.useState(true)
+  const [showOut, setShowOut] = React.useState(true)
+  const [showNet, setShowNet] = React.useState(true)
+  const [hoverTip, setHoverTip] = React.useState<string>('')
 
   const loadWarehouses = React.useCallback(async ()=>{
     try { const res = await api.get('/warehouses'); setWarehouses(res.data || []) } catch {}
@@ -61,7 +66,7 @@ export default function MovementsPage() {
 
   return (
     <div>
-      <Card size="small" title="筛选" style={{ marginBottom: 12 }} extra={<Space>
+  <Card size="small" title="筛选" style={{ marginBottom: 12 }} extra={<Space>
         <Button size="small" onClick={()=>{
           const qs = new URLSearchParams({
             ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }: {}),
@@ -113,7 +118,16 @@ export default function MovementsPage() {
         </Space>
       </Card>
 
-  <Card size="small" title="汇总（in/out/net）" style={{ marginBottom: 12 }} extra={<span style={{ opacity:.65, fontSize:12 }}>{groupBy? '按维度汇总（堆叠/表格）' : '折线图展示'}</span>}>
+  <Card size="small" title="汇总（in/out/net）" style={{ marginBottom: 12 }} extra={<Space size={8}>
+        <span style={{ opacity:.65, fontSize:12 }}>{groupBy? '按维度汇总（堆叠/表格）' : '折线图展示'}</span>
+        {!groupBy && (
+          <>
+            <label style={{ userSelect:'none' }}><input type="checkbox" checked={showIn} onChange={e=> setShowIn(e.target.checked)} /> 入</label>
+            <label style={{ userSelect:'none' }}><input type="checkbox" checked={showOut} onChange={e=> setShowOut(e.target.checked)} /> 出</label>
+            <label style={{ userSelect:'none' }}><input type="checkbox" checked={showNet} onChange={e=> setShowNet(e.target.checked)} /> 净</label>
+          </>
+        )}
+      </Space>}>
         {summary?.length && !groupBy ? (
           <div style={{ height: 220, position: 'relative' }}>
             {(() => {
@@ -125,20 +139,29 @@ export default function MovementsPage() {
               const inPath = build(summary.map(r=> Number(r.inQty||0)))
               const outPath = build(summary.map(r=> Number(r.outQty||0)))
               const netPath = build(summary.map(r=> Math.abs(Number(r.net||0))))
+              const pts = summary.map((r,i)=> ({ i, x: L+i*step, vals: { in: Number(r.inQty||0), out: Number(r.outQty||0), net: Number(r.net||0) }, date: String(r.date) }))
               return (
-                <svg width="100%" height="200" viewBox={`0 0 ${W} ${T+H+10}`} preserveAspectRatio="none">
+                <svg width="100%" height="200" viewBox={`0 0 ${W} ${T+H+10}`} preserveAspectRatio="none"
+                  onMouseLeave={()=> setHoverTip('')} onMouseMove={(e)=>{
+                    const rect = (e.target as SVGElement).getBoundingClientRect()
+                    const rx = e.clientX - rect.left
+                    // 找最近点
+                    const nearest = pts.reduce((p,c)=> Math.abs(c.x - rx) < Math.abs(p.x - rx) ? c : p, pts[0])
+                    setHoverTip(`${nearest.date}  入:${nearest.vals.in.toFixed(3)} 出:${nearest.vals.out.toFixed(3)} 净:${nearest.vals.net.toFixed(3)}`)
+                  }}>
                   {Array.from({ length: 5 }).map((_,i)=> (
                     <line key={i} x1={0} x2={W} y1={T + i*(H/4)} y2={T + i*(H/4)} stroke={'rgba(0,0,0,0.08)'} />
                   ))}
-                  <path d={inPath} stroke="#10b981" fill="none" strokeWidth={2} />
-                  <path d={outPath} stroke="#ef4444" fill="none" strokeWidth={2} />
-                  <path d={netPath} stroke="#3b82f6" fill="none" strokeWidth={2} opacity={0.7} />
+                  {showIn && <path d={inPath} stroke="#10b981" fill="none" strokeWidth={2} />}
+                  {showOut && <path d={outPath} stroke="#ef4444" fill="none" strokeWidth={2} />}
+                  {showNet && <path d={netPath} stroke="#3b82f6" fill="none" strokeWidth={2} opacity={0.7} />}
                 </svg>
               )
             })()}
             <div style={{ position: 'absolute', bottom: 0, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', opacity: .6, fontSize: 12 }}>
               {summary.map((r,i)=> (<span key={i}>{String(r.date).slice(5)}</span>))}
             </div>
+            {hoverTip && <div style={{ position:'absolute', top: 0, left: 8, background:'rgba(0,0,0,0.65)', color:'#fff', padding:'2px 6px', borderRadius:4, fontSize:12 }}>{hoverTip}</div>}
           </div>
         ) : summary?.length && groupBy ? (
           <div>
