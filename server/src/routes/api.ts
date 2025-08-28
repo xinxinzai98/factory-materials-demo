@@ -20,7 +20,7 @@ import bcrypt from 'bcrypt';
 // no external csv lib; build simple CSV manually
 import { StockMovement } from '../entities/StockMovement.js';
 import { AuditLog } from '../entities/AuditLog.js';
-import { errorResponse } from '../middleware/errors.js';
+import { errorResponse, AppError } from '../middleware/errors.js';
 import { validateBody } from '../middleware/validate.js';
 import { inboundDraftSchema, outboundDraftSchema, inboundImmediateSchema, outboundImmediateSchema } from '../schemas/orders.js';
 
@@ -627,13 +627,16 @@ router.post('/inbounds/draft', requireRoles('ADMIN', 'OP'), validateBody(inbound
 // 更新入库草稿（替换明细）
 router.put('/inbounds/:code', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
   const code = req.params.code
-  const { sourceType, supplier, arriveDate, items } = req.body || {}
+  const { sourceType, supplier, arriveDate, items, version } = req.body || {}
   await AppDataSource.transaction(async (mgr: EntityManager) => {
     const orderRepo = mgr.getRepository(InboundOrder)
     const itemRepo = mgr.getRepository(InboundItem)
     const order = await orderRepo.findOne({ where: { code } })
     if (!order) throw new Error('order not found')
     if (order.status !== 'DRAFT') throw new Error('invalid status')
+    if (version !== undefined && Number(version) !== Number((order as any).version || 0)) {
+      return errorResponse(res, new AppError('ERR_CONFLICT', 'stale version', 409))
+    }
     if (sourceType !== undefined) (order as any).sourceType = sourceType
     if (supplier !== undefined) (order as any).supplier = supplier
     if (arriveDate !== undefined) (order as any).arriveDate = arriveDate
@@ -963,13 +966,16 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), validateBody(inboundImmedi
         // 更新出库草稿（替换明细）
   router.put('/outbounds/:code', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
           const code = req.params.code
-          const { purpose, items } = req.body || {}
+          const { purpose, items, version } = req.body || {}
           await AppDataSource.transaction(async (mgr: EntityManager) => {
             const orderRepo = mgr.getRepository(OutboundOrder)
             const itemRepo = mgr.getRepository(OutboundItem)
             const order = await orderRepo.findOne({ where: { code } })
             if (!order) throw new Error('order not found')
             if (order.status !== 'DRAFT') throw new Error('invalid status')
+            if (version !== undefined && Number(version) !== Number((order as any).version || 0)) {
+              return errorResponse(res, new AppError('ERR_CONFLICT', 'stale version', 409))
+            }
             if (purpose !== undefined) (order as any).purpose = purpose
             await orderRepo.save(order)
             if (Array.isArray(items)) {
@@ -1389,6 +1395,22 @@ router.get('/audits', requireRoles('ADMIN'), async (req: Request, res: Response)
   if (code) qb.where('a.entityCode = :c', { c: code })
   const [data,total] = await qb.getManyAndCount()
   res.json({ data, page: { page, pageSize, total } })
+})
+router.get('/audits.csv', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const code = (req.query.code as string || '').trim()
+  const qb = AppDataSource.getRepository(AuditLog).createQueryBuilder('a')
+    .select(['a.action AS action','a.entityType AS entityType','a.entityCode AS entityCode','a.username AS username','a.reason AS reason','a.createdAt AS createdAt'])
+    .orderBy('a.createdAt','DESC')
+  if (code) qb.where('a.entityCode = :c', { c: code })
+  const rows = await qb.getRawMany()
+  const header = ['action','entityType','entityCode','username','reason','createdAt']
+  const fmt = (v: any) => v instanceof Date ? v.toISOString() : v
+  const escape = (v: any) => '"' + String(fmt(v)??'').replace(/"/g,'""') + '"'
+  const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n')
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  const fn = (req.query.filename as string | undefined) || 'audits.csv'
+  res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+  res.send('\ufeff' + csv)
 })
 
 // ---------- Notifications ----------

@@ -57,9 +57,10 @@
   - [x] 共享模板默认回落：当 app_settings 尚无记录时，按作用域返回内置“标准列表/明细”只读模板
   - [x] 模板批量工具：`dump:export-templates`/`load:export-templates` 用于备份与迁移（NDJSON）
 
-  - [ ] 校验与错误码规范（Zod 字段校验、统一错误响应、异常码表初版）
-  - [ ] 并发控制（幂等键中间件，支持 Idempotency-Key；关键单据增加乐观锁版本列）
+  - [x] 校验与错误码规范（Zod 字段校验、统一错误响应、异常码表初版）
+  - [x] 并发控制（幂等键中间件，支持 Idempotency-Key；关键单据增加乐观锁版本列）
   - [ ] 测试加固（为上述新增能力补充 smoke 与文档用例；后续接 Playwright/Jest）
+    - 新增 smoke:idempotency 与 smoke:audits，TESTING 文档补充取消需 reason 与审计查询
 
 - 验收要点
   - 文档更新到位（测试步骤可复现）

@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "smoke:metrics": "tsx src/scripts/metrics-smoke.ts",
-  "smoke:idempotency": "tsx src/scripts/idempotency-smoke.ts",
+    "smoke:idempotency": "tsx src/scripts/idempotency-smoke.ts",
+    "smoke:audits": "tsx src/scripts/audits-smoke.ts",
     "test:metrics": "tsx src/scripts/metrics-tests.ts",
     "test:export-parity": "tsx src/scripts/export-parity.ts",
     "test:export-format": "tsx src/scripts/export-format.ts",
@@ -21,7 +22,9 @@
     "load:export-templates": "tsx src/scripts/export-templates-load.ts",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts",
     "migration:run": "npm run build && node ./node_modules/typeorm/cli.js migration:run -d dist/data-source.js",
-    "migration:revert": "npm run build && node ./node_modules/typeorm/cli.js migration:revert -d dist/data-source.js"
+    "migration:revert": "npm run build && node ./node_modules/typeorm/cli.js migration:revert -d dist/data-source.js",
+    "test": "jest --passWithNoTests",
+    "test:unit": "jest"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -47,9 +50,9 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.12.7",
     "ts-node": "^10.9.2",
-    "tsx": "^4.16.2",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.16.2",
     "typescript": "^5.4.5"
   }
 }

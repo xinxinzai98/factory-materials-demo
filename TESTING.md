@@ -97,6 +97,7 @@
 - 出库：PICK 后库存减少（FEFO 与指定批次策略正确）。
 - 调整：目标批次数量被强制到 targetQty，并记录调整。
 - 转移：源批次减少、目标批次增加；不足时报错。
+ - 作废：取消入/出库单必须在请求体提供 reason，缺失返回 422（ERR_VALIDATION）。
 
 ## 故障排查
 - 迁移失败：检查 Postgres 可达、.env 中 DB_* 配置；或用 `POST /api/seed/dev` 先初始化基础数据。
@@ -153,6 +154,18 @@ npm run smoke:metrics
 ```
 
 期望：打印 dashboard/trends/weekly/low-stocks 的统计信息与 CSV 长度，最后输出 OK。
+
+## 审计日志冒烟测试（可选）
+在 server 目录运行（需后端 8080 已启动）：
+
+```bash
+cd server
+npm run smoke:audits
+```
+
+期望：输出 OK。脚本会：
+- 创建入库草稿→审批→作废（带 reason）
+- 调用 GET /api/audits?code=单号 校验包含 APPROVE 与 CANCEL 记录
 
 ## 最小指标单测（服务口径校验）
 在 server 目录运行：
