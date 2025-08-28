@@ -113,7 +113,7 @@ export default function MovementsPage() {
         </Space>
       </Card>
 
-      <Card size="small" title="汇总（in/out/net）" style={{ marginBottom: 12 }} extra={<span style={{ opacity:.65, fontSize:12 }}>{groupBy? '按维度汇总（表格展示）' : '折线图展示'}</span>}>
+  <Card size="small" title="汇总（in/out/net）" style={{ marginBottom: 12 }} extra={<span style={{ opacity:.65, fontSize:12 }}>{groupBy? '按维度汇总（图表/表格）' : '折线图展示'}</span>}>
         {summary?.length && !groupBy ? (
           <div style={{ height: 220, position: 'relative' }}>
             {(() => {
@@ -142,6 +142,38 @@ export default function MovementsPage() {
           </div>
         ) : summary?.length && groupBy ? (
           <div>
+            {/* 对比柱状图：按维度汇总 period 区间内的总量 */}
+            {(() => {
+              const agg = new Map<string, { in: number; out: number; net: number }>()
+              for (const r of summary as any[]) {
+                const key = (groupBy==='warehouse'? r.warehouse : r.materialCode) || '—'
+                const o = agg.get(key) || { in: 0, out: 0, net: 0 }
+                o.in += Number(r.inQty||0); o.out += Number(r.outQty||0); o.net += Number(r.net||0)
+                agg.set(key, o)
+              }
+              const rows = Array.from(agg.entries()).map(([k,v])=> ({ key: k, ...v }))
+                .sort((a,b)=> (b.in + b.out) - (a.in + a.out)).slice(0, 10)
+              if (!rows.length) return null
+              const W = 600, H = 180, L = 120, R = 20, T = 10, B = 24
+              const max = Math.max(1, ...rows.map(r=> Math.max(r.in, r.out, Math.abs(r.net))))
+              const x = (v:number) => L + (v/max) * (W - L - R)
+              const barH = (H - T) / rows.length - 6
+              return (
+                <svg width="100%" height={H + B} viewBox={`0 0 ${W} ${H+B}`} preserveAspectRatio="none" style={{ marginBottom: 8 }}>
+                  {rows.map((r, i)=> (
+                    <g key={r.key}>
+                      <text x={8} y={T + i*(barH+6) + barH*0.75} fontSize={12} fill="#555">{r.key}</text>
+                      {/* in 绿 */}
+                      <rect x={L} y={T + i*(barH+6)} width={Math.max(2, x(r.in)-L)} height={barH/3} fill="#10b981" />
+                      {/* out 红 */}
+                      <rect x={L} y={T + i*(barH+6) + barH/3 + 2} width={Math.max(2, x(r.out)-L)} height={barH/3} fill="#ef4444" />
+                      {/* net 蓝 */}
+                      <rect x={L} y={T + i*(barH+6) + 2*barH/3 + 4} width={Math.max(2, x(Math.abs(r.net))-L)} height={barH/3} fill="#3b82f6" opacity={0.8} />
+                    </g>
+                  ))}
+                </svg>
+              )
+            })()}
             <Table size="small" pagination={{ pageSize: 20 }} rowKey={(r)=> `${r.date}-${r.warehouse||r.materialCode||''}`}
               dataSource={summary as any}
               columns={[
