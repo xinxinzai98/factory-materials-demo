@@ -366,25 +366,36 @@ router.get('/movements/summary', async (req: Request, res: Response) => {
   const dateTo = req.query.dateTo as string | undefined
   const warehouse = req.query.warehouse as string | undefined
   const materialCode = req.query.materialCode as string | undefined
+  const periodRaw = (req.query.period as string | undefined) || 'day'
+  const groupBy = (req.query.groupBy as string | undefined) || undefined // 'warehouse' | 'material' | undefined
+  const period = ['day','week','month'].includes(periodRaw) ? periodRaw : 'day'
+
+  let format = `to_char(date_trunc('day', mv.created_at), 'YYYY-MM-DD')`
+  if (period === 'week') format = `to_char(date_trunc('week', mv.created_at), 'IYYY-IW')`
+  if (period === 'month') format = `to_char(date_trunc('month', mv.created_at), 'YYYY-MM')`
+
   let cond = '1=1'
   const params: any[] = []
   if (dateFrom) { cond += ` AND mv.created_at >= $${params.length+1}`; params.push(new Date(dateFrom)) }
   if (dateTo) { cond += ` AND mv.created_at <= $${params.length+1}`; params.push(new Date(dateTo)) }
   if (warehouse) { cond += ` AND w.code = $${params.length+1}`; params.push(warehouse) }
   if (materialCode) { cond += ` AND m.code = $${params.length+1}`; params.push(materialCode) }
-  const rows = await AppDataSource.query(
-    `SELECT to_char(date_trunc('day', mv.created_at), 'YYYY-MM-DD') AS date,
-            SUM(CASE WHEN mv.qty_change::numeric > 0 THEN mv.qty_change::numeric ELSE 0 END) AS inQty,
-            SUM(CASE WHEN mv.qty_change::numeric < 0 THEN -mv.qty_change::numeric ELSE 0 END) AS outQty,
-            SUM(mv.qty_change::numeric) AS net
+
+  const selectGroup = groupBy === 'warehouse' ? `, w.code AS "warehouse"` : (groupBy === 'material' ? `, m.code AS "materialCode"` : '')
+  const groupCols = groupBy === 'warehouse' ? ', 2' : (groupBy === 'material' ? ', 2' : '')
+  const orderCols = groupCols ? `1 ASC, 2 ASC` : `1 ASC`
+
+  const sql = `SELECT ${format} AS date${selectGroup},
+            SUM(CASE WHEN mv.qty_change::numeric > 0 THEN mv.qty_change::numeric ELSE 0 END) AS "inQty",
+            SUM(CASE WHEN mv.qty_change::numeric < 0 THEN -mv.qty_change::numeric ELSE 0 END) AS "outQty",
+            SUM(mv.qty_change::numeric) AS "net"
      FROM stock_movements mv
      JOIN materials m ON m.id = mv.material_id
      JOIN warehouses w ON w.id = mv.warehouse_id
      WHERE ${cond}
-     GROUP BY 1
-     ORDER BY 1 ASC`,
-    params
-  )
+     GROUP BY 1${groupCols}
+     ORDER BY ${orderCols}`
+  const rows = await AppDataSource.query(sql, params)
   res.json({ data: rows })
 })
 
@@ -394,26 +405,41 @@ router.get('/movements/summary.csv', async (req: Request, res: Response) => {
   const dateTo = req.query.dateTo as string | undefined
   const warehouse = req.query.warehouse as string | undefined
   const materialCode = req.query.materialCode as string | undefined
+  const periodRaw = (req.query.period as string | undefined) || 'day'
+  const groupBy = (req.query.groupBy as string | undefined) || undefined // 'warehouse' | 'material' | undefined
+  const period = ['day','week','month'].includes(periodRaw) ? periodRaw : 'day'
+
+  let format = `to_char(date_trunc('day', mv.created_at), 'YYYY-MM-DD')`
+  if (period === 'week') format = `to_char(date_trunc('week', mv.created_at), 'IYYY-IW')`
+  if (period === 'month') format = `to_char(date_trunc('month', mv.created_at), 'YYYY-MM')`
+
   let cond = '1=1'
   const params: any[] = []
   if (dateFrom) { cond += ` AND mv.created_at >= $${params.length+1}`; params.push(new Date(dateFrom)) }
   if (dateTo) { cond += ` AND mv.created_at <= $${params.length+1}`; params.push(new Date(dateTo)) }
   if (warehouse) { cond += ` AND w.code = $${params.length+1}`; params.push(warehouse) }
   if (materialCode) { cond += ` AND m.code = $${params.length+1}`; params.push(materialCode) }
-  const rows = await AppDataSource.query(
-    `SELECT to_char(date_trunc('day', mv.created_at), 'YYYY-MM-DD') AS date,
-            SUM(CASE WHEN mv.qty_change::numeric > 0 THEN mv.qty_change::numeric ELSE 0 END) AS inQty,
-            SUM(CASE WHEN mv.qty_change::numeric < 0 THEN -mv.qty_change::numeric ELSE 0 END) AS outQty,
-            SUM(mv.qty_change::numeric) AS net
+
+  const selectGroup = groupBy === 'warehouse' ? `, w.code AS "warehouse"` : (groupBy === 'material' ? `, m.code AS "materialCode"` : '')
+  const groupCols = groupBy === 'warehouse' ? ', 2' : (groupBy === 'material' ? ', 2' : '')
+  const orderCols = groupCols ? `1 ASC, 2 ASC` : `1 ASC`
+
+  const sql = `SELECT ${format} AS date${selectGroup},
+            SUM(CASE WHEN mv.qty_change::numeric > 0 THEN mv.qty_change::numeric ELSE 0 END) AS "inQty",
+            SUM(CASE WHEN mv.qty_change::numeric < 0 THEN -mv.qty_change::numeric ELSE 0 END) AS "outQty",
+            SUM(mv.qty_change::numeric) AS "net"
      FROM stock_movements mv
      JOIN materials m ON m.id = mv.material_id
      JOIN warehouses w ON w.id = mv.warehouse_id
      WHERE ${cond}
-     GROUP BY 1
-     ORDER BY 1 ASC`,
-    params
-  )
-  const header = ['date','inQty','outQty','net']
+     GROUP BY 1${groupCols}
+     ORDER BY ${orderCols}`
+  const rows = await AppDataSource.query(sql, params)
+
+  const headerBase = ['date','inQty','outQty','net']
+  const header = groupBy === 'warehouse' ? ['date','warehouse','inQty','outQty','net']
+               : groupBy === 'material' ? ['date','materialCode','inQty','outQty','net']
+               : headerBase
   const escape = (v: any) => '"' + String(v??'').replace(/"/g,'""') + '"'
   const csv = [header.join(',')].concat(rows.map((r:any)=> header.map(h=> escape(r[h])).join(','))).join('\n')
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');

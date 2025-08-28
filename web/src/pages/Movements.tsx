@@ -1,5 +1,5 @@
 import React from 'react'
-import { Card, Space, DatePicker, Select, Input, Button, Table, Empty } from 'antd'
+import { Card, Space, DatePicker, Select, Input, Button, Table, Empty, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { api } from '@/api/http'
 import { tsSuffix } from '@/utils/time'
@@ -22,7 +22,9 @@ export default function MovementsPage() {
   const [sourceType, setSourceType] = React.useState<string | undefined>()
   const [data, setData] = React.useState<Row[]>([])
   const [loading, setLoading] = React.useState(false)
-  const [summary, setSummary] = React.useState<Array<{ date: string; inQty: string; outQty: string; net: string }>>([])
+  const [summary, setSummary] = React.useState<Array<any>>([])
+  const [period, setPeriod] = React.useState<'day'|'week'|'month'>('day')
+  const [groupBy, setGroupBy] = React.useState<''|'warehouse'|'material'>('')
 
   const loadWarehouses = React.useCallback(async ()=>{
     try { const res = await api.get('/warehouses'); setWarehouses(res.data || []) } catch {}
@@ -39,12 +41,12 @@ export default function MovementsPage() {
       if (sourceType) params.sourceType = sourceType
       const [mv, sum] = await Promise.all([
         api.get('/movements', { params }),
-        api.get('/movements/summary', { params: { ...params, limit: undefined } }),
+        api.get('/movements/summary', { params: { ...params, period, groupBy: groupBy || undefined, limit: undefined } }),
       ])
       setData((mv.data || []).map((r: any)=> ({ ...r, qtyChange: Number(r.qtyChange) })))
       setSummary(sum.data?.data || [])
     } finally { setLoading(false) }
-  }, [dateRange, warehouse, materialCode, sourceType])
+  }, [dateRange, warehouse, materialCode, sourceType, period, groupBy])
   React.useEffect(()=>{ load() }, [])
 
   const columns = [
@@ -75,6 +77,8 @@ export default function MovementsPage() {
             ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') }: {}),
             ...(warehouse? { warehouse } : {}),
             ...(materialCode.trim()? { materialCode: materialCode.trim() } : {}),
+            ...(groupBy? { groupBy } : {}),
+            period,
             filename: `movement-summary-${tsSuffix()}.csv`
           }).toString()
           const a = document.createElement('a'); a.href = '/api/movements/summary.csv?' + qs; a.download = `movement-summary-${tsSuffix()}.csv`; a.click()
@@ -82,6 +86,7 @@ export default function MovementsPage() {
       </Space>}>
         <Space wrap>
           <DatePicker.RangePicker value={dateRange as any} onChange={(v)=> setDateRange(v as any)} allowEmpty={[true,true]} />
+          <Select size="small" style={{ width: 140 }} value={period} onChange={(v)=> setPeriod(v)} options={[{label:'按日', value:'day'},{label:'按周', value:'week'},{label:'按月', value:'month'}]} />
           <Select size="small" style={{ width: 160 }} placeholder="仓库" allowClear value={warehouse} onChange={(v)=> setWarehouse(v)}
             options={warehouses.map(w=> ({ label: w.code, value: w.code }))}
           />
@@ -94,15 +99,22 @@ export default function MovementsPage() {
               { label: 'TRANSFER', value: 'TRANSFER' },
             ]}
           />
+          <Select size="small" style={{ width: 160 }} placeholder="按维度汇总" allowClear value={groupBy || undefined} onChange={(v)=> setGroupBy((v||'') as any)}
+            options={[
+              { label: '不分组', value: '' },
+              { label: '按仓库', value: 'warehouse' },
+              { label: '按物料', value: 'material' },
+            ]}
+          />
           <Space>
             <Button type="primary" onClick={load} loading={loading}>查询</Button>
-            <Button onClick={()=>{ setDateRange(null); setWarehouse(undefined); setMaterialCode(''); setSourceType(undefined); setTimeout(()=> load(), 0) }}>重置</Button>
+            <Button onClick={()=>{ setDateRange(null); setWarehouse(undefined); setMaterialCode(''); setSourceType(undefined); setPeriod('day'); setGroupBy(''); setTimeout(()=> load(), 0) }}>重置</Button>
           </Space>
         </Space>
       </Card>
 
-      <Card size="small" title="日汇总（in/out/net）" style={{ marginBottom: 12 }}>
-        {summary?.length ? (
+      <Card size="small" title="汇总（in/out/net）" style={{ marginBottom: 12 }} extra={<span style={{ opacity:.65, fontSize:12 }}>{groupBy? '按维度汇总（表格展示）' : '折线图展示'}</span>}>
+        {summary?.length && !groupBy ? (
           <div style={{ height: 220, position: 'relative' }}>
             {(() => {
               const W = 600, H = 180, L = 24, T = 10
@@ -127,6 +139,19 @@ export default function MovementsPage() {
             <div style={{ position: 'absolute', bottom: 0, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', opacity: .6, fontSize: 12 }}>
               {summary.map((r,i)=> (<span key={i}>{String(r.date).slice(5)}</span>))}
             </div>
+          </div>
+        ) : summary?.length && groupBy ? (
+          <div>
+            <Table size="small" pagination={{ pageSize: 20 }} rowKey={(r)=> `${r.date}-${r.warehouse||r.materialCode||''}`}
+              dataSource={summary as any}
+              columns={[
+                { title: '周期', dataIndex: 'date' },
+                ...(groupBy==='warehouse' ? [{ title: '仓库', dataIndex: 'warehouse' }] : groupBy==='material' ? [{ title: '物料', dataIndex: 'materialCode' }] : [] as any),
+                { title: '入库量', dataIndex: 'inQty', align: 'right' as const, render: (v:any)=> Number(v).toFixed(3) },
+                { title: '出库量', dataIndex: 'outQty', align: 'right' as const, render: (v:any)=> Number(v).toFixed(3) },
+                { title: '净变动', dataIndex: 'net', align: 'right' as const, render: (v:any)=> Number(v).toFixed(3) },
+              ] as any}
+            />
           </div>
         ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />}
       </Card>

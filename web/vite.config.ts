@@ -34,7 +34,7 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/inbounds') || url.pathname.startsWith('/api/outbounds') || url.pathname.startsWith('/api/stocks') || url.pathname.startsWith('/api/metrics'),
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/inbounds') || url.pathname.startsWith('/api/outbounds') || url.pathname.startsWith('/api/stocks') || url.pathname.startsWith('/api/metrics') || url.pathname.startsWith('/api/movements'),
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'api-list-cache',

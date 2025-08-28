@@ -189,36 +189,44 @@ export default function AnalyticsPage() {
           <Input size="small" style={{ width: 180 }} placeholder="单号包含..." allowClear value={orderCode} onChange={(e)=> setOrderCode(e.target.value)} />
           <Space size={8}>
             <Button size="small" onClick={()=>{
+              const fn = `inbounds-${tsSuffix()}.csv`
               const qs = new URLSearchParams({
                 ...(inStatus? { status: inStatus } : {}),
                 ...(orderCode.trim()? { code: orderCode.trim() } : {}),
                 ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') } : {}),
+                filename: fn,
               }).toString();
-              const a=document.createElement('a'); a.href='/api/inbounds.csv?'+qs; a.download='inbounds.csv'; a.click();
+              const a=document.createElement('a'); a.href='/api/inbounds.csv?'+qs; a.download=fn; a.click();
             }}>入库单</Button>
             <Button size="small" onClick={()=>{
+              const fn = `inbound-items-${tsSuffix()}.csv`
               const qs = new URLSearchParams({
                 ...(inStatus? { status: inStatus } : {}),
                 ...(orderCode.trim()? { code: orderCode.trim() } : {}),
                 ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') } : {}),
+                filename: fn,
               }).toString();
-              const a=document.createElement('a'); a.href='/api/inbound-items.csv?'+qs; a.download='inbound-items.csv'; a.click();
+              const a=document.createElement('a'); a.href='/api/inbound-items.csv?'+qs; a.download=fn; a.click();
             }}>入库明细</Button>
             <Button size="small" onClick={()=>{
+              const fn = `outbounds-${tsSuffix()}.csv`
               const qs = new URLSearchParams({
                 ...(outStatus? { status: outStatus } : {}),
                 ...(orderCode.trim()? { code: orderCode.trim() } : {}),
                 ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') } : {}),
+                filename: fn,
               }).toString();
-              const a=document.createElement('a'); a.href='/api/outbounds.csv?'+qs; a.download='outbounds.csv'; a.click();
+              const a=document.createElement('a'); a.href='/api/outbounds.csv?'+qs; a.download=fn; a.click();
             }}>出库单</Button>
             <Button size="small" onClick={()=>{
+              const fn = `outbound-items-${tsSuffix()}.csv`
               const qs = new URLSearchParams({
                 ...(outStatus? { status: outStatus } : {}),
                 ...(orderCode.trim()? { code: orderCode.trim() } : {}),
                 ...(dateRange? { dateFrom: dateRange[0].format('YYYY-MM-DD'), dateTo: dateRange[1].format('YYYY-MM-DD') } : {}),
+                filename: fn,
               }).toString();
-              const a=document.createElement('a'); a.href='/api/outbound-items.csv?'+qs; a.download='outbound-items.csv'; a.click();
+              const a=document.createElement('a'); a.href='/api/outbound-items.csv?'+qs; a.download=fn; a.click();
             }}>出库明细</Button>
           </Space>
         </Space>
