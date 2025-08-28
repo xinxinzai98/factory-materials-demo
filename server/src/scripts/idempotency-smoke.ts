@@ -18,7 +18,8 @@ async function main() {
   if (bad.ok || bad.status !== 422 || bad.data?.code !== 'ERR_VALIDATION') throw new Error('expect 422 validation error')
 
   // 2) 幂等键：相同键重复提交
-  const body = { code: 'IDEMP-ONCE', sourceType: 'PURCHASE', supplier: 'S1', items: [{ materialCode: 'M001', qty: 1 }] }
+  const uniq = Date.now()
+  const body = { code: `IDEMP-ONCE-${uniq}`, sourceType: 'PURCHASE', supplier: 'S1', items: [{ materialCode: 'M001', qty: 1 }] }
   const key = `k-${Date.now()}`
   const first = await post('/inbounds/draft', body, { 'Idempotency-Key': key })
   if (!first.ok) throw new Error('first request should succeed')

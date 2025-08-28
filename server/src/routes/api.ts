@@ -19,6 +19,7 @@ import { getDashboardMetrics, getTrends as svcGetTrends, getLowStocks as svcGetL
 import bcrypt from 'bcrypt';
 // no external csv lib; build simple CSV manually
 import { StockMovement } from '../entities/StockMovement.js';
+import { AuditLog } from '../entities/AuditLog.js';
 import { errorResponse } from '../middleware/errors.js';
 import { validateBody } from '../middleware/validate.js';
 import { inboundDraftSchema, outboundDraftSchema, inboundImmediateSchema, outboundImmediateSchema } from '../schemas/orders.js';
@@ -668,6 +669,7 @@ router.post('/inbounds/:code/approve', requireRoles('ADMIN', 'OP'), async (req: 
   if (order.status !== 'DRAFT') return res.status(409).json({ message: 'invalid status' })
   order.status = 'APPROVED'
   await repo.save(order)
+  await AppDataSource.getRepository(AuditLog).save({ action: 'APPROVE', entityType: 'InboundOrder', entityCode: order.code, username: (req as any).user?.username || null, reason: null, details: null })
   res.json(order)
 })
 
@@ -734,12 +736,15 @@ router.post('/inbounds/:code/putaway', requireRoles('ADMIN', 'OP'), async (req: 
     await nRepo.save(nRepo.create({ type: 'success', title: '入库完成', message: `入库单 ${order.code} 上架完成`, status: 'UNREAD' as any }))
   await recalcAlerts(mgr)
     const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
+  await mgr.getRepository(AuditLog).save({ action: 'PUTAWAY', entityType: 'InboundOrder', entityCode: order.code, username: (req as any).user?.username || null, reason: null, details: null })
     res.json(saved)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
 })
 
 // 取消入库单（仅 DRAFT/APPROVED 可取消；已 PUTAWAY 不允许）
 router.post('/inbounds/:code/cancel', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const { reason } = req.body || {}
+  if (!reason) return res.status(422).json({ code: 'ERR_VALIDATION', message: 'reason required' })
   const code = req.params.code
   const repo = AppDataSource.getRepository(InboundOrder)
   const order = await repo.findOne({ where: { code } })
@@ -748,6 +753,7 @@ router.post('/inbounds/:code/cancel', requireRoles('ADMIN'), async (req: Request
   if (order.status === 'CANCELLED') return res.json(order)
   order.status = 'CANCELLED' as any
   await repo.save(order)
+  await AppDataSource.getRepository(AuditLog).save({ action: 'CANCEL', entityType: 'InboundOrder', entityCode: order.code, username: (req as any).user?.username || null, reason, details: null })
   res.json(order)
 })
 
@@ -821,6 +827,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), validateBody(inboundImmedi
       )
     }
   const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
+  await mgr.getRepository(AuditLog).save({ action: 'INBOUND_IMMEDIATE', entityType: 'InboundOrder', entityCode: order.code, username: (req as any).user?.username || null, reason: null, details: null })
   await mgr.getRepository(Notification).save({ type: 'success', title: '入库完成', message: `入库单 ${code} 完成`, status: 'UNREAD' as any })
   await recalcAlerts(mgr)
     res.status(201).json(saved)
@@ -986,7 +993,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), validateBody(inboundImmedi
           }).catch((e:any)=> errorResponse(res, e))
         })
 
-        // POST /api/outbounds/:code/approve 审批（不动库存）
+  // POST /api/outbounds/:code/approve 审批（不动库存）
   router.post('/outbounds/:code/approve', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
           const code = req.params.code
           const repo = AppDataSource.getRepository(OutboundOrder)
@@ -995,6 +1002,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), validateBody(inboundImmedi
           if (order.status !== 'DRAFT') return errorResponse(res, new Error('invalid status'))
           order.status = 'APPROVED'
           await repo.save(order)
+    await AppDataSource.getRepository(AuditLog).save({ action: 'APPROVE', entityType: 'OutboundOrder', entityCode: order.code, username: (req as any).user?.username || null, reason: null, details: null })
           res.json(order)
         })
 
@@ -1062,6 +1070,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), validateBody(inboundImmedi
             }
             order.status = 'PICKED'
             await orderRepo.save(order)
+            await mgr.getRepository(AuditLog).save({ action: 'PICK', entityType: 'OutboundOrder', entityCode: order.code, username: (req as any).user?.username || null, reason: null, details: null })
             await mgr.getRepository(Notification).save({ type: 'success', title: '出库完成', message: `出库单 ${order.code} 已拣货过账`, status: 'UNREAD' as any })
             await recalcAlerts(mgr)
             const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
@@ -1073,6 +1082,8 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), validateBody(inboundImmedi
 
 // 取消出库单（仅 DRAFT/APPROVED 可取消；PICKED 不允许）
 router.post('/outbounds/:code/cancel', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const { reason } = req.body || {}
+  if (!reason) return res.status(422).json({ code: 'ERR_VALIDATION', message: 'reason required' })
   const code = req.params.code
   const repo = AppDataSource.getRepository(OutboundOrder)
   const order = await repo.findOne({ where: { code } })
@@ -1081,6 +1092,7 @@ router.post('/outbounds/:code/cancel', requireRoles('ADMIN'), async (req: Reques
   if (order.status === 'CANCELLED') return res.json(order)
   order.status = 'CANCELLED' as any
   await repo.save(order)
+  await AppDataSource.getRepository(AuditLog).save({ action: 'CANCEL', entityType: 'OutboundOrder', entityCode: order.code, username: (req as any).user?.username || null, reason, details: null })
   res.json(order)
 })
 
@@ -1140,6 +1152,15 @@ router.post('/adjustments', requireRoles('ADMIN', 'OP'), async (req: Request, re
         })
       )
     }
+    // audit
+    await mgr.getRepository(AuditLog).save({
+      action: 'ADJUST',
+      entityType: 'Stock',
+      entityCode: materialCode,
+      username: (req as any).user?.username || null,
+      reason: reason || null,
+      details: { warehouse, batchNo: batchNo || '', targetQty, before, after, delta },
+    })
   await recalcAlerts(mgr)
   res.status(201).json(adj)
   }).catch((e: any) => res.status(400).json({ message: e.message }))
@@ -1228,6 +1249,7 @@ router.post('/outbounds', requireRoles('ADMIN', 'OP'), validateBody(outboundImme
     }
 
   const saved = await mgr.getRepository(OutboundOrder).findOne({ where: { id: order.id }, relations: ['items'] });
+    await mgr.getRepository(AuditLog).save({ action: 'OUTBOUND_IMMEDIATE', entityType: 'OutboundOrder', entityCode: order.code, username: (req as any).user?.username || null, reason: null, details: null })
     await mgr.getRepository(Notification).save({ type: 'success', title: '出库完成', message: `出库单 ${code} 完成`, status: 'UNREAD' as any })
   await recalcAlerts(mgr)
     res.status(201).json(saved);
@@ -1342,9 +1364,31 @@ router.post('/transfers', requireRoles('ADMIN', 'OP'), async (req: Request, res:
       )
     }
 
-  await recalcAlerts(mgr)
-  res.status(201).json({ ok: true, moved: Number(qty) })
+    // audit transfer at end of transaction
+    await mgr.getRepository(AuditLog).save({
+      action: 'TRANSFER',
+      entityType: 'Stock',
+      entityCode: materialCode,
+      username: (req as any).user?.username || null,
+      reason: null,
+      details: { fromWarehouse, toWarehouse, qty },
+    })
+    await recalcAlerts(mgr)
+    res.status(201).json({ ok: true, moved: Number(qty) })
   }).catch((e: any) => res.status(400).json({ message: e.message }))
+})
+
+// 审计查询（简单分页）
+router.get('/audits', requireRoles('ADMIN'), async (req: Request, res: Response) => {
+  const page = +(req.query.page as string || 1)
+  const pageSize = +(req.query.pageSize as string || 20)
+  const code = (req.query.code as string || '').trim()
+  const qb = AppDataSource.getRepository(AuditLog).createQueryBuilder('a')
+    .orderBy('a.createdAt','DESC')
+    .skip((page-1)*pageSize).take(pageSize)
+  if (code) qb.where('a.entityCode = :c', { c: code })
+  const [data,total] = await qb.getManyAndCount()
+  res.json({ data, page: { page, pageSize, total } })
 })
 
 // ---------- Notifications ----------
