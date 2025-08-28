@@ -30,6 +30,7 @@ export default function MovementsPage() {
   const [showOut, setShowOut] = React.useState(true)
   const [showNet, setShowNet] = React.useState(true)
   const [hoverTip, setHoverTip] = React.useState<string>('')
+  const [topN, setTopN] = React.useState<number>(5)
 
   const loadWarehouses = React.useCallback(async ()=>{
     try { const res = await api.get('/warehouses'); setWarehouses(res.data || []) } catch {}
@@ -127,6 +128,12 @@ export default function MovementsPage() {
             <label style={{ userSelect:'none' }}><input type="checkbox" checked={showNet} onChange={e=> setShowNet(e.target.checked)} /> 净</label>
           </>
         )}
+        {groupBy && (
+          <>
+            <span style={{ marginLeft: 8, opacity:.65 }}>TopN:</span>
+            <Select size="small" style={{ width: 80 }} value={topN} options={[{label:'5', value:5},{label:'10', value:10}]} onChange={(v)=> setTopN(v)} />
+          </>
+        )}
       </Space>}>
         {summary?.length && !groupBy ? (
           <div style={{ height: 220, position: 'relative' }}>
@@ -171,33 +178,47 @@ export default function MovementsPage() {
               const dimKey = (r:any)=> (groupBy==='warehouse'? r.warehouse : r.materialCode) || '—'
               const periodKeys = Array.from(new Set((summary as any[]).map(r=> r.date)))
               const dims = Array.from(new Set((summary as any[]).map(dimKey)))
-              const color = (i:number)=> ['#0ea5e9','#22c55e','#f97316','#8b5cf6','#e11d48'][i%5]
+              const color = (i:number)=> ['#0ea5e9','#22c55e','#f97316','#8b5cf6','#e11d48','#10b981','#f59e0b','#3b82f6','#ef4444','#06b6d4'][i%10]
               const W=640, H=200, L=30, B=28, step = (W - L*2) / Math.max(1, periodKeys.length)
               const groups = periodKeys.map(pk => {
                 const rows = (summary as any[]).filter(r=> r.date===pk).map(r=> ({ dim: dimKey(r), in: Number(r.inQty||0), out: Number(r.outQty||0) }))
                 rows.sort((a,b)=> (b.in+b.out)-(a.in+b.out))
-                return { period: pk, rows: rows.slice(0,5) }
+                return { period: pk, rows: rows.slice(0, topN) }
               })
               const max = Math.max(1, ...groups.flatMap(g=> g.rows.map(r=> r.in + r.out)))
               const y = (v:number)=> (H - B) - (v/max) * (H - B - 16)
+              const [tip, setTip] = React.useState<string>('')
               return (
-                <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ marginBottom: 8 }}>
-                  {groups.map((g, gi)=> {
-                    let acc = 0
-                    return (
-                      <g key={g.period}>
-                        <text x={L + gi*step + step*0.1} y={H-6} fontSize={11} fill="#555">{String(g.period).slice(5)}</text>
-                        {g.rows.map((r, ri)=> {
-                          const h = Math.max(2, ((r.in + r.out) / max) * (H - B - 16))
-                          const x = L + gi*step + step*0.25
-                          const yTop = (H - B - acc) - h
-                          acc += h
-                          return <rect key={ri} x={x} y={yTop} width={step*0.5} height={h} fill={color(dims.indexOf(r.dim))} opacity={0.9} />
-                        })}
-                      </g>
-                    )
-                  })}
-                </svg>
+                <div style={{ position:'relative' }}>
+                  <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ marginBottom: 8 }}
+                    onMouseMove={(e)=>{
+                      const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect()
+                      const rx = e.clientX - rect.left
+                      const gi = Math.min(groups.length-1, Math.max(0, Math.round((rx - L) / step)))
+                      const g = groups[gi]
+                      if (!g) { setTip(''); return }
+                      const lines = [String(g.period)].concat(g.rows.map(r=> `${r.dim}: ${(r.in+r.out).toFixed(3)}`))
+                      setTip(lines.join('  '))
+                    }} onMouseLeave={()=> setTip('')}
+                  >
+                    {groups.map((g, gi)=> {
+                      let acc = 0
+                      return (
+                        <g key={g.period}>
+                          <text x={L + gi*step + step*0.1} y={H-6} fontSize={11} fill="#555">{String(g.period).slice(5)}</text>
+                          {g.rows.map((r, ri)=> {
+                            const h = Math.max(2, ((r.in + r.out) / max) * (H - B - 16))
+                            const x = L + gi*step + step*0.25
+                            const yTop = (H - B - acc) - h
+                            acc += h
+                            return <rect key={ri} x={x} y={yTop} width={step*0.5} height={h} fill={color(dims.indexOf(r.dim))} opacity={0.9} />
+                          })}
+                        </g>
+                      )
+                    })}
+                  </svg>
+                  {tip && <div style={{ position:'absolute', top: 0, left: 8, background:'rgba(0,0,0,0.65)', color:'#fff', padding:'2px 6px', borderRadius:4, fontSize:12 }}>{tip}</div>}
+                </div>
               )
             })()}
             {/* 对比柱状图：按维度汇总 period 区间内的总量 */}
@@ -210,7 +231,7 @@ export default function MovementsPage() {
                 agg.set(key, o)
               }
               const rows = Array.from(agg.entries()).map(([k,v])=> ({ key: k, ...v }))
-                .sort((a,b)=> (b.in + b.out) - (a.in + a.out)).slice(0, 10)
+                .sort((a,b)=> (b.in + b.out) - (a.in + a.out)).slice(0, topN)
               if (!rows.length) return null
               const W = 600, H = 180, L = 120, R = 20, T = 10, B = 24
               const max = Math.max(1, ...rows.map(r=> Math.max(r.in, r.out, Math.abs(r.net))))
@@ -222,11 +243,11 @@ export default function MovementsPage() {
                     <g key={r.key}>
                       <text x={8} y={T + i*(barH+6) + barH*0.75} fontSize={12} fill="#555">{r.key}</text>
                       {/* in 绿 */}
-                      <rect x={L} y={T + i*(barH+6)} width={Math.max(2, x(r.in)-L)} height={barH/3} fill="#10b981" />
+                      {showIn && <rect x={L} y={T + i*(barH+6)} width={Math.max(2, x(r.in)-L)} height={barH/3} fill="#10b981" />}
                       {/* out 红 */}
-                      <rect x={L} y={T + i*(barH+6) + barH/3 + 2} width={Math.max(2, x(r.out)-L)} height={barH/3} fill="#ef4444" />
+                      {showOut && <rect x={L} y={T + i*(barH+6) + barH/3 + 2} width={Math.max(2, x(r.out)-L)} height={barH/3} fill="#ef4444" />}
                       {/* net 蓝 */}
-                      <rect x={L} y={T + i*(barH+6) + 2*barH/3 + 4} width={Math.max(2, x(Math.abs(r.net))-L)} height={barH/3} fill="#3b82f6" opacity={0.8} />
+                      {showNet && <rect x={L} y={T + i*(barH+6) + 2*barH/3 + 4} width={Math.max(2, x(Math.abs(r.net))-L)} height={barH/3} fill="#3b82f6" opacity={0.8} />}
                     </g>
                   ))}
                 </svg>
