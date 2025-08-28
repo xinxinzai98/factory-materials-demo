@@ -8,6 +8,8 @@ import bcrypt from 'bcrypt';
 import { AppDataSource } from './data-source.js';
 import apiRouter from './routes/api.js';
 import authRouter from './routes/auth.js';
+import { errorHandler } from './middleware/errors.js';
+import { ensureIdempotency } from './middleware/idempotency.js';
 import { User } from './entities/User.js';
 import { Warehouse } from './entities/Warehouse.js';
 import { Material } from './entities/Material.js';
@@ -27,7 +29,7 @@ app.get('/health', (_req: Request, res: Response) => {
 // 注意顺序：先挂载无需鉴权的 /api/auth
 app.use('/api/auth', authRouter);
 // 再挂载需要鉴权的 /api
-app.use('/api', apiRouter);
+app.use('/api', ensureIdempotency, apiRouter);
 
 const PORT = +(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -79,3 +81,6 @@ AppDataSource.initialize()
     console.error('Data Source initialization error', err);
     process.exit(1);
   });
+
+// 错误处理（最后）
+app.use(errorHandler);

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, Index, VersionColumn } from 'typeorm';
 import { InboundItem } from './InboundItem.js';
 
 export type InboundStatus = 'DRAFT' | 'APPROVED' | 'PUTAWAY' | 'CANCELLED';
@@ -32,4 +32,8 @@ export class InboundOrder {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  // 乐观锁版本
+  @VersionColumn()
+  version!: number;
 }

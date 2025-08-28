@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, Index, VersionColumn } from 'typeorm';
 import { OutboundItem } from './OutboundItem.js';
 
 export type OutboundStatus = 'DRAFT' | 'APPROVED' | 'PICKED' | 'CANCELLED';
@@ -26,4 +26,8 @@ export class OutboundOrder {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  // 乐观锁版本
+  @VersionColumn()
+  version!: number;
 }

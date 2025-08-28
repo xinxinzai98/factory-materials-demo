@@ -42,6 +42,23 @@
 - 登录：POST /api/auth/login
 - 当前用户：GET /api/auth/me
 
+### 错误码与校验
+- 统一错误响应结构：`{ code, message, details? }`
+- 典型错误码：
+	- ERR_VALIDATION：Zod 参数校验失败（422）
+	- ERR_NOT_FOUND：资源不存在（404）
+	- ERR_CONFLICT：业务冲突（409）
+	- ERR_DUPLICATE_CODE：单号重复（409）
+	- ERR_INVALID_STATUS：状态不合法（409）
+	- ERR_INSUFFICIENT_STOCK：库存不足（409）
+	- ERR_IDEMPOTENT_REPLAY：幂等键重复（409）
+- 示例：在创建入库草稿时遗漏 items，将返回 422 与字段错误详情。
+
+### 幂等键
+- 对 POST/PUT/PATCH/DELETE 支持请求头 `Idempotency-Key`（或 `x-idempotency-key`）。
+- 首次成功写入后，同方法同路径同键的重复请求会返回 409（ERR_IDEMPOTENT_REPLAY）。
+- 建议：客户端在“立即入库/出库”“上架/拣货”等按钮操作时生成一次性 UUID 作为幂等键。
+
 ---
 
 ## 新增功能详测

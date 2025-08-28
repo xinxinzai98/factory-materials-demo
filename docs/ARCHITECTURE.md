@@ -112,6 +112,16 @@
 - Excel：推荐直接导出 XLSX（前端 JSON→XLSX），避免 CSV 在地区设置下的日期/小数解析误差；若使用 CSV，建议设置列类型并指定日期格式。
 - BI 工具（如 Power BI/Tableau）：导入时将日期列识别为日期/时间，数量列设为数值（浮点），编码类文本列设为文本，避免自动转数值导致前导零丢失。
 
+## 错误处理与幂等控制
+- 参数校验：使用 Zod 定义请求 Schema（见 `server/src/schemas/orders.ts`），路由通过 `validateBody(schema)` 应用。
+- 统一错误响应：`{ code, message, details? }`，映射逻辑在 `server/src/middleware/errors.ts`，覆盖：
+  - ERR_VALIDATION（422）、ERR_NOT_FOUND（404）、ERR_CONFLICT（409）、ERR_DUPLICATE_CODE（409）、
+    ERR_INVALID_STATUS（409）、ERR_INSUFFICIENT_STOCK（409）、ERR_IDEMPOTENT_REPLAY（409）。
+- 幂等键：POST/PUT/PATCH/DELETE 支持 `Idempotency-Key`；首次写入 `idempotency_keys` 表成功，
+  同方法同路径（不含查询串）重复请求将返回 409，避免按钮重复点击导致重复过账。
+- 乐观锁：`InboundOrder`/`OutboundOrder` 使用 `@VersionColumn()`，后续如需要在更新时传回版本做比对，可扩展为 If-Match 语义。
+- 迁移：`1724830000000-idempotency-and-versions.ts` 创建幂等表并补充版本列。
+
 ## 构建与拆包策略（前端）
 - 路由级懒加载：所有页面以 `React.lazy` 按路由拆分，减少首屏体积。
 - 手动 vendor 分包（见 `web/vite.config.ts` → `manualChunks`）：

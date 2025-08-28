@@ -19,6 +19,9 @@ import { getDashboardMetrics, getTrends as svcGetTrends, getLowStocks as svcGetL
 import bcrypt from 'bcrypt';
 // no external csv lib; build simple CSV manually
 import { StockMovement } from '../entities/StockMovement.js';
+import { errorResponse } from '../middleware/errors.js';
+import { validateBody } from '../middleware/validate.js';
+import { inboundDraftSchema, outboundDraftSchema, inboundImmediateSchema, outboundImmediateSchema } from '../schemas/orders.js';
 
 const router = Router();
 
@@ -594,9 +597,8 @@ router.get('/inbound-items', async (req: Request, res: Response) => {
 })
 
 // POST /api/inbounds/draft 创建草稿（不动库存）
-router.post('/inbounds/draft', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
-  const { code, sourceType, supplier, arriveDate, items } = req.body || {}
-  if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' })
+router.post('/inbounds/draft', requireRoles('ADMIN', 'OP'), validateBody(inboundDraftSchema), async (req: Request, res: Response) => {
+  const { code, sourceType, supplier, arriveDate, items } = (req as any).validatedBody
 
   await AppDataSource.transaction(async (mgr: EntityManager) => {
     const exist = await mgr.getRepository(InboundOrder).findOne({ where: { code } })
@@ -618,7 +620,7 @@ router.post('/inbounds/draft', requireRoles('ADMIN', 'OP'), async (req: Request,
     }
     const saved = await mgr.getRepository(InboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
     res.status(201).json(saved)
-  }).catch((e: any) => res.status(400).json({ message: e.message }))
+  }).catch((e: any) => errorResponse(res, e))
 })
 
 // 更新入库草稿（替换明细）
@@ -750,9 +752,8 @@ router.post('/inbounds/:code/cancel', requireRoles('ADMIN'), async (req: Request
 })
 
 // POST /api/inbounds
-router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
-  const { code, sourceType, supplier, arriveDate, items, warehouseCode } = req.body || {};
-  if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' });
+router.post('/inbounds', requireRoles('ADMIN', 'OP'), validateBody(inboundImmediateSchema), async (req: Request, res: Response) => {
+  const { code, sourceType, supplier, arriveDate, items, warehouseCode } = (req as any).validatedBody;
 
   const matRepo = AppDataSource.getRepository(Material);
   const whRepo = AppDataSource.getRepository(Warehouse);
@@ -823,7 +824,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
   await mgr.getRepository(Notification).save({ type: 'success', title: '入库完成', message: `入库单 ${code} 完成`, status: 'UNREAD' as any })
   await recalcAlerts(mgr)
     res.status(201).json(saved)
-  }).catch((e: any) => res.status(400).json({ message: e.message }))
+  }).catch((e: any) => errorResponse(res, e))
 })
 
         // ------------------- 出库单：列表与流转 -------------------
@@ -928,9 +929,8 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
         })
 
         // POST /api/outbounds/draft 创建草稿（不动库存）
-  router.post('/outbounds/draft', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
-          const { code, purpose, items } = req.body || {}
-          if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' })
+  router.post('/outbounds/draft', requireRoles('ADMIN', 'OP'), validateBody(outboundDraftSchema), async (req: Request, res: Response) => {
+          const { code, purpose, items } = (req as any).validatedBody
           await AppDataSource.transaction(async (mgr: EntityManager) => {
             const exist = await mgr.getRepository(OutboundOrder).findOne({ where: { code } })
             if (exist) throw new Error('duplicate code')
@@ -950,7 +950,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
             }
             const saved = await mgr.getRepository(OutboundOrder).findOne({ where: { id: order.id }, relations: ['items'] })
             res.status(201).json(saved)
-          }).catch((e: any) => res.status(400).json({ message: e.message }))
+          }).catch((e: any) => errorResponse(res, e))
         })
 
         // 更新出库草稿（替换明细）
@@ -983,7 +983,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
             }
             const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
             res.json(saved)
-          }).catch((e:any)=> res.status(400).json({ message: e.message }))
+          }).catch((e:any)=> errorResponse(res, e))
         })
 
         // POST /api/outbounds/:code/approve 审批（不动库存）
@@ -991,8 +991,8 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
           const code = req.params.code
           const repo = AppDataSource.getRepository(OutboundOrder)
           const order = await repo.findOne({ where: { code } })
-          if (!order) return res.status(404).json({ message: 'order not found' })
-          if (order.status !== 'DRAFT') return res.status(409).json({ message: 'invalid status' })
+          if (!order) return errorResponse(res, new Error('order not found'))
+          if (order.status !== 'DRAFT') return errorResponse(res, new Error('invalid status'))
           order.status = 'APPROVED'
           await repo.save(order)
           res.json(order)
@@ -1066,7 +1066,7 @@ router.post('/inbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: 
             await recalcAlerts(mgr)
             const saved = await orderRepo.findOne({ where: { id: order.id }, relations: ['items'] })
             res.json(saved)
-          }).catch((e: any) => res.status(400).json({ message: e.message }))
+          }).catch((e: any) => errorResponse(res, e))
         })
 
   // 兼容：原立即入/出库接口（创建并直接过账）
@@ -1076,8 +1076,8 @@ router.post('/outbounds/:code/cancel', requireRoles('ADMIN'), async (req: Reques
   const code = req.params.code
   const repo = AppDataSource.getRepository(OutboundOrder)
   const order = await repo.findOne({ where: { code } })
-  if (!order) return res.status(404).json({ message: 'order not found' })
-  if (order.status === 'PICKED') return res.status(409).json({ message: 'already posted' })
+  if (!order) return errorResponse(res, new Error('order not found'))
+  if (order.status === 'PICKED') return errorResponse(res, new Error('already posted'))
   if (order.status === 'CANCELLED') return res.json(order)
   order.status = 'CANCELLED' as any
   await repo.save(order)
@@ -1146,9 +1146,8 @@ router.post('/adjustments', requireRoles('ADMIN', 'OP'), async (req: Request, re
 })
 
 // POST /api/outbounds
-router.post('/outbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res: Response) => {
-  const { code, purpose, items, warehouseCode } = req.body || {};
-  if (!code || !Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'code/items required' });
+router.post('/outbounds', requireRoles('ADMIN', 'OP'), validateBody(outboundImmediateSchema), async (req: Request, res: Response) => {
+  const { code, purpose, items, warehouseCode } = (req as any).validatedBody;
 
   await AppDataSource.transaction(async (mgr: EntityManager) => {
     const exist = await mgr.getRepository(OutboundOrder).findOne({ where: { code } });
@@ -1232,7 +1231,7 @@ router.post('/outbounds', requireRoles('ADMIN', 'OP'), async (req: Request, res:
     await mgr.getRepository(Notification).save({ type: 'success', title: '出库完成', message: `出库单 ${code} 完成`, status: 'UNREAD' as any })
   await recalcAlerts(mgr)
     res.status(201).json(saved);
-  }).catch((e: any) => res.status(400).json({ message: e.message }));
+  }).catch((e: any) => errorResponse(res, e));
 });
 
 // POST /api/transfers  移库/转移库存
