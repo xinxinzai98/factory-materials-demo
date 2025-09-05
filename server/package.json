@@ -1,15 +1,26 @@
 {
   "name": "factory-materials-server",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && npm run gen:version",
     "start": "node dist/index.js",
+    "gen:version": "node scripts/write-version.mjs",
+    "release:patch": "node scripts/release-tag.mjs patch",
+    "release:minor": "node scripts/release-tag.mjs minor",
+    "release:major": "node scripts/release-tag.mjs major",
+    "load:autocannon": "tsx src/scripts/load-test-autocannon.ts",
+    "load:k6": "echo 'Run: k6 run src/scripts/load-test-k6.js --vus 30 --duration 20s'",
+    "load:biz": "tsx src/scripts/load-test-business.ts",
+    "gen:release-notes": "node scripts/gen-release-notes.mjs",
+    "go-live:scan": "node scripts/go-live-scan.mjs",
     "smoke:metrics": "tsx src/scripts/metrics-smoke.ts",
     "smoke:idempotency": "tsx src/scripts/idempotency-smoke.ts",
     "smoke:audits": "tsx src/scripts/audits-smoke.ts",
+    "smoke:all": "tsx src/scripts/smoke-all.ts",
+    "check:audit-schema": "tsx src/scripts/check-audit-schema.ts",
     "test:metrics": "tsx src/scripts/metrics-tests.ts",
     "test:export-parity": "tsx src/scripts/export-parity.ts",
     "test:export-format": "tsx src/scripts/export-format.ts",
@@ -27,6 +38,7 @@
     "test:unit": "jest"
   },
   "dependencies": {
+    "autocannon": "^8.0.0",
     "bcrypt": "^5.1.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -39,20 +51,29 @@
     "morgan": "^1.10.0",
     "pg": "^8.11.5",
     "reflect-metadata": "^0.2.2",
+    "semver": "^7.7.2",
+    "node-fetch": "^2.7.0",
+    "supertest": "^6.3.4",
     "typeorm": "^0.3.20",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/autocannon": "^7.12.7",
     "@types/bcrypt": "^5.0.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.12.7",
+    "@types/supertest": "^2.0.16",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.16.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "@types/node-fetch": "^2.6.11"
   }
 }
