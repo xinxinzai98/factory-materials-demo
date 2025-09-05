@@ -47,8 +47,8 @@
 - [ ] 出库流（若本次发布包含）
 - [ ] 调整 / 移库（库存数正确 + StockMovement 记录）
 - [ ] 通知生成与“全部已读”
-- [x] 导出 CSV / JSON 字段一致（`npm run test:export-parity` 已由 metrics-smoke 覆盖部分导出, 仍需执行 parity test 取证）
-- [ ] 日期/数值格式校验（`npm run test:export-format` / `npm run test:export-number`）
+- [x] 导出 CSV / JSON 字段一致（`npm run test:export-parity` PASS）
+- [x] 日期/数值格式校验（`npm run test:export-format` / `npm run test:export-number` PASS）
 - [ ] 模板：共享模板加载/重命名/删除/回落
 - [x] 幂等：重复 Idempotency-Key 返回 ERR_IDEMPOTENT_REPLAY (smoke:idempotency OK)
 - [x] 错误格式统一：401/403/409/422 示例返回 {code,message} (已有集成测试)
