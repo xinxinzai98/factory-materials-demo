@@ -28,6 +28,7 @@
     "test:export-metrics": "tsx src/scripts/export-metrics-format.ts",
     "test:export-movements": "tsx src/scripts/export-movements-format.ts",
     "smoke:export-templates": "tsx src/scripts/export-templates-smoke.ts",
+  "test:approve-conflict": "tsx src/scripts/concurrency-approve-conflict.ts",
     "seed:export-templates": "tsx src/scripts/export-templates-seed.ts",
     "dump:export-templates": "tsx src/scripts/export-templates-dump.ts",
     "load:export-templates": "tsx src/scripts/export-templates-load.ts",

@@ -43,7 +43,7 @@
 > 参考 `TESTING.md` 与 `server/src/scripts/*` 脚本。打钩表示执行通过并截图/日志存档。
 - [x] 登录 / 角色权限 (冒烟脚本登录成功, token 获取成功示例)
 - [x] 入库流：草稿→审批→上架 (业务压测 45 flows 中 44 成功, 单条失败待重试逻辑优化)
-- [ ] 并发审批冲突：ERR_VERSION_STALE 复现 (需专门脚本/手工并发验证)
+- [x] 并发审批冲突：ERR_VERSION_STALE 复现 (`npm run test:approve-conflict` 输出 ok=1 stale=7)
 - [ ] 出库流（若本次发布包含）
 - [ ] 调整 / 移库（库存数正确 + StockMovement 记录）
 - [ ] 通知生成与“全部已读”
